@@ -25,16 +25,28 @@ const sign = (header: object, payload: object, sk: Uint8Array) => {
   const input = `${bu(JSON.stringify(header))}.${bu(JSON.stringify(payload))}`;
   return `${input}.${bu(p256.sign(new TextEncoder().encode(input), sk))}`;
 };
-function buildChain(open: Record<string, unknown> | null, closed: Record<string, unknown> | null, opts: { closedSigner?: Uint8Array; skipSdHash?: boolean } = {}) {
+function buildChain(
+  open: Record<string, unknown> | null,
+  closed: Record<string, unknown> | null,
+  opts: { closedSigner?: Uint8Array; skipSdHash?: boolean } = {},
+) {
   const hops: string[] = [];
   if (open) {
     const d = disclose(open);
-    hops.push(`${sign({ alg: "ES256", typ: "example+sd-jwt", kid: "root-1" }, { delegate_payload: [{ "...": d.digest }], _sd_alg: "sha-256" }, rootKey)}~${d.raw}~`);
+    hops.push(
+      `${sign({ alg: "ES256", typ: "example+sd-jwt", kid: "root-1" }, { delegate_payload: [{ "...": d.digest }], _sd_alg: "sha-256" }, rootKey)}~${d.raw}~`,
+    );
   }
   if (closed) {
     const d = disclose(closed);
     const prevSd = hops[0];
-    const payload: Record<string, unknown> = { delegate_payload: [{ "...": d.digest }], iat: AP2_NOW - 10, aud: "credential-provider", nonce: "n-1", _sd_alg: "sha-256" };
+    const payload: Record<string, unknown> = {
+      delegate_payload: [{ "...": d.digest }],
+      iat: AP2_NOW - 10,
+      aud: "credential-provider",
+      nonce: "n-1",
+      _sd_alg: "sha-256",
+    };
     if (!opts.skipSdHash) payload.sd_hash = sdHash(prevSd);
     hops.push(`${sign({ alg: "ES256", typ: "kb+sd-jwt" }, payload, opts.closedSigner ?? agentKey)}~${d.raw}~`);
   }
@@ -108,7 +120,9 @@ describe("AP2 v0.2 SD-JWT chain (fixture)", () => {
     const d = dec(readFixture("ap2-checkout-chain.txt"), AP2_NOW);
     expect(d.kind).toBe("ap2.mandate-chain");
     expect(codes(d)).toEqual(expect.arrayContaining(["CHECKOUT_HASH_OK", "MANDATE_WITHIN_CONSTRAINTS"]));
-    expect(d.summary).toContain("the agent closed it to buy 1 x Supershoe Limited Edition Gold Sneaker Womens 9 from Demo Merchant (merchant_1) for $199.00 USD, within those limits");
+    expect(d.summary).toContain(
+      "the agent closed it to buy 1 x Supershoe Limited Edition Gold Sneaker Womens 9 from Demo Merchant (merchant_1) for $199.00 USD, within those limits",
+    );
   });
 });
 
@@ -144,7 +158,12 @@ describe("AP2 v0.2 chains built in-test", () => {
   });
 
   it("open mandate with no amount limit", () => {
-    const m = { vct: "mandate.payment.open.1", constraints: [{ type: "payment.reference", conditional_transaction_id: "x" }], cnf: { jwk: jwkOf(agentKey) }, exp: AP2_NOW + 60 };
+    const m = {
+      vct: "mandate.payment.open.1",
+      constraints: [{ type: "payment.reference", conditional_transaction_id: "x" }],
+      cnf: { jwk: jwkOf(agentKey) },
+      exp: AP2_NOW + 60,
+    };
     const d = dec(buildChain(m, null), AP2_NOW);
     expect(codes(d)).toEqual(expect.arrayContaining(["MANDATE_NO_AMOUNT_LIMIT", "MANDATE_ANY_PAYEE", "OPEN_MANDATE_PENDING"]));
   });
@@ -170,7 +189,14 @@ describe("AP2 x x402 credential bundle", () => {
       domain: { name: "USDC", version: "2", chainId: 84532, verifyingContract: USDC_BASE_SEPOLIA },
       types: TWA_TYPES,
       primaryType: "TransferWithAuthorization",
-      message: { from: a.from, to: a.to, value: BigInt(a.value), validAfter: 0n, validBefore: BigInt(a.validBefore), nonce: `0x${a.nonce}` },
+      message: {
+        from: a.from,
+        to: a.to,
+        value: BigInt(a.value),
+        validAfter: 0n,
+        validBefore: BigInt(a.validBefore),
+        nonce: `0x${a.nonce}`,
+      },
     });
     const d = dec(JSON.stringify(b), AP2_NOW);
     expect(codes(d)).toContain("SIG_VALID");
@@ -189,14 +215,31 @@ describe("AP2 x x402 credential bundle", () => {
 
 describe("AP2 v0.1 legacy mandates", () => {
   it("intent mandate without merchants or confirmation", () => {
-    const d = dec(JSON.stringify({ user_cart_confirmation_required: false, natural_language_description: "red running shoes under $120", merchants: null, skus: null, requires_refundability: false, intent_expiry: "2026-04-28T10:00:00Z" }), AP2_NOW);
+    const d = dec(
+      JSON.stringify({
+        user_cart_confirmation_required: false,
+        natural_language_description: "red running shoes under $120",
+        merchants: null,
+        skus: null,
+        requires_refundability: false,
+        intent_expiry: "2026-04-28T10:00:00Z",
+      }),
+      AP2_NOW,
+    );
     expect(d.kind).toBe("ap2.v01.intent-mandate");
-    expect(d.summary).toBe('AP2 v0.1 intent: "red running shoes under $120", at any merchant, until 28 Apr 2026, 10:00:00 UTC, without cart confirmation.');
+    expect(d.summary).toBe(
+      'AP2 v0.1 intent: "red running shoes under $120", at any merchant, until 28 Apr 2026, 10:00:00 UTC, without cart confirmation.',
+    );
     expect(codes(d)).toEqual(expect.arrayContaining(["INTENT_ANY_MERCHANT", "INTENT_NO_CART_CONFIRMATION"]));
   });
 
   it("intent mandate with no expiry", () => {
-    expect(flagOf(dec(JSON.stringify({ natural_language_description: "anything", user_cart_confirmation_required: true }), AP2_NOW), "INTENT_NO_EXPIRY")?.level).toBe("danger");
+    expect(
+      flagOf(
+        dec(JSON.stringify({ natural_language_description: "anything", user_cart_confirmation_required: true }), AP2_NOW),
+        "INTENT_NO_EXPIRY",
+      )?.level,
+    ).toBe("danger");
   });
 
   it("cart mandate with an embedded x402 PaymentRequired", () => {
@@ -207,7 +250,11 @@ describe("AP2 v0.1 legacy mandates", () => {
         user_cart_confirmation_required: true,
         payment_request: {
           method_data: [{ supported_methods: "https://www.x402.org/", data: req }],
-          details: { id: "order_1", display_items: [{ label: "Premium data", amount: { currency: "USD", value: 0.01 }, refund_period: 30 }], total: { label: "Total", amount: { currency: "USD", value: 0.01 } } },
+          details: {
+            id: "order_1",
+            display_items: [{ label: "Premium data", amount: { currency: "USD", value: 0.01 }, refund_period: 30 }],
+            total: { label: "Total", amount: { currency: "USD", value: 0.01 } },
+          },
         },
         cart_expiry: "2026-04-28T04:00:00Z",
         merchant_name: "Example API",
@@ -216,13 +263,24 @@ describe("AP2 v0.1 legacy mandates", () => {
     };
     const d = dec(JSON.stringify(cart), AP2_NOW);
     expect(d.kind).toBe("ap2.v01.cart-mandate");
-    expect(d.summary).toBe("AP2 v0.1 cart from Example API: Premium data for $0.01 USD, payable over x402, valid until 28 Apr 2026, 04:00:00 UTC.");
+    expect(d.summary).toBe(
+      "AP2 v0.1 cart from Example API: Premium data for $0.01 USD, payable over x402, valid until 28 Apr 2026, 04:00:00 UTC.",
+    );
     expect(codes(d)).toContain("CART_UNSIGNED");
     expect(d.kind === "ap2.v01.cart-mandate" && d.children?.[0].kind).toBe("x402.payment-required");
   });
 
   it("payment mandate without user authorization", () => {
-    const pm = { payment_mandate_contents: { payment_mandate_id: "pm_1", payment_details_id: "order_1", payment_details_total: { label: "Total", amount: { currency: "USD", value: 120 } }, payment_response: { request_id: "order_1", method_name: "CARD", details: { token: "tok_1" } }, merchant_agent: "shoe-merchant", timestamp: "2026-04-28T03:00:00Z" } };
+    const pm = {
+      payment_mandate_contents: {
+        payment_mandate_id: "pm_1",
+        payment_details_id: "order_1",
+        payment_details_total: { label: "Total", amount: { currency: "USD", value: 120 } },
+        payment_response: { request_id: "order_1", method_name: "CARD", details: { token: "tok_1" } },
+        merchant_agent: "shoe-merchant",
+        timestamp: "2026-04-28T03:00:00Z",
+      },
+    };
     const d = dec(JSON.stringify(pm), AP2_NOW);
     expect(d.summary).toBe("AP2 v0.1 payment of $120.00 USD via CARD to merchant agent shoe-merchant, with NO user authorization.");
     expect(flagOf(d, "PAYMENT_MANDATE_UNSIGNED")?.level).toBe("danger");

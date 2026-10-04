@@ -61,7 +61,10 @@ async function readStdin(): Promise<string> {
 }
 
 function makeStyle(on: boolean) {
-  const w = (code: string, end = "0") => (s: string) => (on ? `\x1b[${code}m${s}\x1b[${end}m` : s);
+  const w =
+    (code: string, end = "0") =>
+    (s: string) =>
+      on ? `\x1b[${code}m${s}\x1b[${end}m` : s;
   return {
     bold: w("1", "22"),
     dim: w("2", "22"),

@@ -6,7 +6,8 @@ import { FIX } from "./helpers.js";
 
 const CLI = fileURLToPath(new URL("../dist/cli.js", import.meta.url));
 const FIXTURE = fileURLToPath(new URL("./fixtures/ap2-x402-bundle.json", import.meta.url));
-const run = (args: string[], input?: string) => spawnSync(process.execPath, [CLI, ...args], { input, encoding: "utf8", env: { ...process.env, NO_COLOR: "1" } });
+const run = (args: string[], input?: string) =>
+  spawnSync(process.execPath, [CLI, ...args], { input, encoding: "utf8", env: { ...process.env, NO_COLOR: "1" } });
 
 describe.skipIf(!existsSync(CLI))("CLI (built dist)", () => {
   it("decodes a header argument", () => {
@@ -18,7 +19,10 @@ describe.skipIf(!existsSync(CLI))("CLI (built dist)", () => {
   });
 
   it("reads stdin and prints JSON", () => {
-    const out = execFileSync(process.execPath, [CLI, "--json", "--now", "1740672100"], { input: FIX.x402_v1_http["X-PAYMENT"][0], encoding: "utf8" });
+    const out = execFileSync(process.execPath, [CLI, "--json", "--now", "1740672100"], {
+      input: FIX.x402_v1_http["X-PAYMENT"][0],
+      encoding: "utf8",
+    });
     const d = JSON.parse(out);
     expect(d.kind).toBe("x402.payment-payload");
     expect(d.flags.map((f: { code: string }) => f.code)).toContain("SIG_VALID");

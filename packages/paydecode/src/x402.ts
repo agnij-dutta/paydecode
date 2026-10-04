@@ -7,10 +7,19 @@ import { networkInfo, findEvmToken, findSplToken, chainName, tokensAtAddress } f
 import { isEvmAddress } from "./eip712.js";
 import { analyzeEip3009, analyzePermit2, type Analysis, type PaymentContext } from "./evm.js";
 import { analyzeSvmTransaction } from "./svm.js";
+import { asText } from "./format.js";
 
 type Obj = Record<string, unknown>;
 
-export function make(kind: string, title: string, summary: string, sections: Section[], flags: Flag[], raw: unknown, children?: Decoded[]): Decoded {
+export function make(
+  kind: string,
+  title: string,
+  summary: string,
+  sections: Section[],
+  flags: Flag[],
+  raw: unknown,
+  children?: Decoded[],
+): Decoded {
   const d: Decoded = { kind, title, summary, sections: sections.filter((s) => s.fields.length), flags: sortFlags(flags), raw };
   if (children && children.length) d.children = children;
   return d;
@@ -20,14 +29,16 @@ export function make(kind: string, title: string, summary: string, sections: Sec
 
 export const isPaymentRequired = (o: Obj) => typeof o.x402Version === "number" && Array.isArray(o.accepts);
 export const isPaymentPayload = (o: Obj) =>
-  typeof o.x402Version === "number" && isRecord(o.payload) && (isRecord(o.accepted) || typeof o.scheme === "string" || typeof o.network === "string");
+  typeof o.x402Version === "number" &&
+  isRecord(o.payload) &&
+  (isRecord(o.accepted) || typeof o.scheme === "string" || typeof o.network === "string");
 export const isSettleResponse = (o: Obj) => typeof o.success === "boolean" && ("transaction" in o || "network" in o || "errorReason" in o);
 export const isVerifyResponse = (o: Obj) => typeof o.isValid === "boolean";
 export const isFacilitatorRequest = (o: Obj) => isRecord(o.paymentPayload) && (isRecord(o.paymentRequirements) || "x402Version" in o);
 export const isSupported = (o: Obj) => Array.isArray(o.kinds) && o.kinds.every((k) => isRecord(k) && "scheme" in k);
 /** A bare PaymentRequirements object (one entry of `accepts`). */
 export const isRequirement = (o: Obj) =>
-  typeof o.scheme === "string" && typeof o.network === "string" && ("payTo" in o) && ("amount" in o || "maxAmountRequired" in o);
+  typeof o.scheme === "string" && typeof o.network === "string" && "payTo" in o && ("amount" in o || "maxAmountRequired" in o);
 
 // ---------------------------------------------------------------- glossary
 
@@ -55,7 +66,7 @@ const ERROR_GLOSSARY: Record<string, string> = {
 };
 
 export const explainError = (code: unknown) => {
-  const c = String(code ?? "");
+  const c = asText(code, "");
   return ERROR_GLOSSARY[c] ? `${c} (${ERROR_GLOSSARY[c]})` : c;
 };
 
@@ -82,8 +93,8 @@ export function priceText(amount: unknown, network: unknown, asset: unknown): st
     const tk = findSplToken(asset);
     if (tk) return `${formatUnits(amount, tk.decimals)} ${tk.symbol}`;
   }
-  if (typeof asset === "string" && /^[A-Z]{3}$/.test(asset)) return `${amount} ${asset} (atomic units)`;
-  return `${String(amount)} atomic units of ${asset ? short(asset) : "an unspecified asset"}`;
+  if (typeof asset === "string" && /^[A-Z]{3}$/.test(asset)) return `${asText(amount)} ${asset} (atomic units)`;
+  return `${asText(amount)} atomic units of ${asset ? short(asset) : "an unspecified asset"}`;
 }
 
 function transferMethod(req: Obj): string {
@@ -103,7 +114,10 @@ export function requirementContext(req: Obj, version: number): PaymentContext {
     network: typeof req.network === "string" ? req.network : undefined,
     asset: typeof req.asset === "string" ? req.asset : undefined,
     payTo: typeof req.payTo === "string" ? req.payTo : undefined,
-    amount: version >= 2 || req.amount !== undefined ? (req.amount as string | undefined) ?? (req.maxAmountRequired as string | undefined) : (req.maxAmountRequired as string | undefined),
+    amount:
+      version >= 2 || req.amount !== undefined
+        ? ((req.amount as string | undefined) ?? (req.maxAmountRequired as string | undefined))
+        : (req.maxAmountRequired as string | undefined),
     amountLabel: req.amount !== undefined ? "accepted.amount" : "maxAmountRequired",
     extra: isRecord(req.extra) ? req.extra : undefined,
     maxTimeoutSeconds: typeof req.maxTimeoutSeconds === "number" ? req.maxTimeoutSeconds : undefined,
@@ -123,56 +137,99 @@ export function describeRequirement(req: Obj, version: number): ReqView {
   const price = priceText(amount, req.network, req.asset);
   const extra = isRecord(req.extra) ? req.extra : {};
   const method = transferMethod(req);
-  const payTo = String(req.payTo ?? "");
-  const scheme = String(req.scheme ?? "?");
+  const payTo = asText(req.payTo, "");
+  const scheme = asText(req.scheme, "?");
   const text = `${scheme === "upto" ? "up to " : ""}${price} on ${net.name} to ${payTo.length > 30 || isEvmAddress(payTo) ? short(payTo) : `'${payTo}'`} (${scheme}${method ? `, ${method}` : ""})`;
 
-  if (!net.known) flags.push(flag("warn", "UNKNOWN_NETWORK", `Network '${String(req.network)}' isn't one paydecode recognizes.`));
+  if (!net.known) flags.push(flag("warn", "UNKNOWN_NETWORK", `Network '${asText(req.network)}' isn't one paydecode recognizes.`));
   if (net.family === "evm") {
     const tk = findEvmToken(net.chainId, req.asset);
     if (!tk && typeof req.asset === "string") {
       const elsewhere = tokensAtAddress(req.asset);
       flags.push(
         elsewhere.length
-          ? flag("danger", "ASSET_WRONG_CHAIN", `Asset ${short(req.asset)} is ${elsewhere.map((e) => `${chainName(e.chainId)} ${e.symbol}`).join(", ")}, not a token on ${net.name}.`)
-          : flag("warn", "UNKNOWN_ASSET", `Asset ${short(req.asset)} isn't a token paydecode knows on ${net.name}; the price is shown in raw units.`),
+          ? flag(
+              "danger",
+              "ASSET_WRONG_CHAIN",
+              `Asset ${short(req.asset)} is ${elsewhere.map((e) => `${chainName(e.chainId)} ${e.symbol}`).join(", ")}, not a token on ${net.name}.`,
+            )
+          : flag(
+              "warn",
+              "UNKNOWN_ASSET",
+              `Asset ${short(req.asset)} isn't a token paydecode knows on ${net.name}; the price is shown in raw units.`,
+            ),
       );
     }
     if (tk && scheme === "exact" && method === "EIP-3009") {
       if (tk.transfer === "permit2") {
-        flags.push(flag("danger", "ASSET_NO_EIP3009", `${tk.symbol} on ${net.name} doesn't implement EIP-3009, but the requirements imply the default eip3009 transfer method. Set extra.assetTransferMethod to 'permit2'.`));
+        flags.push(
+          flag(
+            "danger",
+            "ASSET_NO_EIP3009",
+            `${tk.symbol} on ${net.name} doesn't implement EIP-3009, but the requirements imply the default eip3009 transfer method. Set extra.assetTransferMethod to 'permit2'.`,
+          ),
+        );
       }
       if (typeof extra.name === "string" && extra.name !== tk.name) {
-        flags.push(flag("danger", "REQUIREMENTS_DOMAIN_WRONG", `extra.name is '${extra.name}' but ${net.name} ${tk.symbol}'s on-chain EIP-712 domain name is '${tk.name}'. Clients that sign with this will produce signatures the token rejects.`));
+        flags.push(
+          flag(
+            "danger",
+            "REQUIREMENTS_DOMAIN_WRONG",
+            `extra.name is '${extra.name}' but ${net.name} ${tk.symbol}'s on-chain EIP-712 domain name is '${tk.name}'. Clients that sign with this will produce signatures the token rejects.`,
+          ),
+        );
       }
       if (typeof extra.version === "string" && extra.version !== tk.version) {
-        flags.push(flag("danger", "REQUIREMENTS_DOMAIN_WRONG", `extra.version is '${extra.version}' but ${net.name} ${tk.symbol}'s on-chain EIP-712 domain version is '${tk.version}'.`));
+        flags.push(
+          flag(
+            "danger",
+            "REQUIREMENTS_DOMAIN_WRONG",
+            `extra.version is '${extra.version}' but ${net.name} ${tk.symbol}'s on-chain EIP-712 domain version is '${tk.version}'.`,
+          ),
+        );
       }
     }
     if (scheme === "exact" && method === "EIP-3009" && (typeof extra.name !== "string" || typeof extra.version !== "string")) {
-      flags.push(flag("warn", "REQUIREMENTS_NO_DOMAIN", "extra.name / extra.version (the token's EIP-712 domain) are missing; clients have to guess them and may sign under the wrong domain."));
+      flags.push(
+        flag(
+          "warn",
+          "REQUIREMENTS_NO_DOMAIN",
+          "extra.name / extra.version (the token's EIP-712 domain) are missing; clients have to guess them and may sign under the wrong domain.",
+        ),
+      );
     }
-    if (payTo && !isEvmAddress(payTo)) flags.push(flag("info", "PAYTO_ROLE", `payTo is '${payTo}', a role rather than an address; the actual recipient is resolved elsewhere.`));
+    if (payTo && !isEvmAddress(payTo))
+      flags.push(
+        flag("info", "PAYTO_ROLE", `payTo is '${payTo}', a role rather than an address; the actual recipient is resolved elsewhere.`),
+      );
   }
   if (net.family === "svm") {
-    if (typeof extra.feePayer !== "string") flags.push(flag("warn", "SVM_NO_FEE_PAYER", "Solana requirements should name the facilitator's fee payer in extra.feePayer."));
-    if (typeof req.asset === "string" && !findSplToken(req.asset)) flags.push(flag("warn", "UNKNOWN_ASSET", `Mint ${short(req.asset)} isn't one paydecode knows; the price is shown in raw units.`));
+    if (typeof extra.feePayer !== "string")
+      flags.push(flag("warn", "SVM_NO_FEE_PAYER", "Solana requirements should name the facilitator's fee payer in extra.feePayer."));
+    if (typeof req.asset === "string" && !findSplToken(req.asset))
+      flags.push(flag("warn", "UNKNOWN_ASSET", `Mint ${short(req.asset)} isn't one paydecode knows; the price is shown in raw units.`));
   }
   if (typeof req.maxTimeoutSeconds === "number" && req.maxTimeoutSeconds > 3600) {
-    flags.push(flag("warn", "LONG_TIMEOUT", `maxTimeoutSeconds is ${duration(req.maxTimeoutSeconds)}; clients will sign authorizations that stay live that long.`));
+    flags.push(
+      flag(
+        "warn",
+        "LONG_TIMEOUT",
+        `maxTimeoutSeconds is ${duration(req.maxTimeoutSeconds)}; clients will sign authorizations that stay live that long.`,
+      ),
+    );
   }
   try {
-    if (amount !== undefined && BigInt(String(amount)) === 0n) flags.push(flag("warn", "AMOUNT_ZERO", "Requires a payment of 0."));
+    if (amount !== undefined && BigInt(asText(amount)) === 0n) flags.push(flag("warn", "AMOUNT_ZERO", "Requires a payment of 0."));
   } catch {
-    flags.push(flag("warn", "AMOUNT_INVALID", `Amount '${String(amount)}' is not an integer string.`));
+    flags.push(flag("warn", "AMOUNT_INVALID", `Amount '${asText(amount)}' is not an integer string.`));
   }
 
   const fields: Field[] = [
-    field("Price", price, "amount", `raw ${String(amount)}${version === 1 ? " (maxAmountRequired)" : ""}`),
+    field("Price", price, "amount", `raw ${asText(amount)}${version === 1 ? " (maxAmountRequired)" : ""}`),
     field("Scheme", `${scheme}${method ? ` (${method})` : ""}`),
-    field("Network", net.name, "text", net.caip2 ?? String(req.network)),
+    field("Network", net.name, "text", net.caip2 ?? asText(req.network)),
     field("Pay to", payTo, payTo.length > 30 || isEvmAddress(payTo) ? "address" : "text"),
-    ...(req.asset !== undefined ? [field("Asset", String(req.asset), "address")] : []),
+    ...(req.asset !== undefined ? [field("Asset", asText(req.asset), "address")] : []),
     ...(typeof req.maxTimeoutSeconds === "number" ? [field("Max timeout", duration(req.maxTimeoutSeconds))] : []),
     ...(typeof req.resource === "string" ? [field("Resource", req.resource)] : []),
     ...(typeof req.description === "string" && req.description ? [field("Description", req.description)] : []),
@@ -194,10 +251,10 @@ function resourceFields(o: Obj): Field[] {
   const r = o.resource;
   if (!isRecord(r)) return [];
   return [
-    field("URL", String(r.url ?? "")),
-    ...(r.description ? [field("Description", String(r.description))] : []),
-    ...(r.mimeType ? [field("MIME type", String(r.mimeType))] : []),
-    ...(r.serviceName ? [field("Service", String(r.serviceName))] : []),
+    field("URL", asText(r.url, "")),
+    ...(r.description ? [field("Description", asText(r.description))] : []),
+    ...(r.mimeType ? [field("MIME type", asText(r.mimeType))] : []),
+    ...(r.serviceName ? [field("Service", asText(r.serviceName))] : []),
   ];
 }
 
@@ -223,7 +280,12 @@ export function decodePaymentRequired(o: Obj, now: number): Decoded {
     flags.push(...v.flags.map((f) => (accepts.length > 1 ? { ...f, message: `Option ${i + 1}: ${f.message}` } : f)));
   });
   const res = resourceText(o, accepts[0]);
-  const desc = isRecord(o.resource) && typeof o.resource.description === "string" ? o.resource.description : typeof accepts[0]?.description === "string" ? accepts[0].description : undefined;
+  const desc =
+    isRecord(o.resource) && typeof o.resource.description === "string"
+      ? o.resource.description
+      : typeof accepts[0]?.description === "string"
+        ? accepts[0].description
+        : undefined;
   if (isRecord(o.resource)) sections.unshift(section("Resource", resourceFields(o)));
   sections.push(...extensionsSection(o.extensions));
   if (!accepts.length) flags.push(flag("warn", "NO_ACCEPTS", "The accepts list is empty, so there is no way to pay."));
@@ -233,7 +295,10 @@ export function decodePaymentRequired(o: Obj, now: number): Decoded {
   const summary =
     accepts.length === 1
       ? `Server asks for ${views[0].text}${forWhat}.${err}`
-      : `Server offers ${plural(accepts.length, "way")} to pay${forWhat}: ${listJoin(views.map((v) => v.text), "or")}.${err}`;
+      : `Server offers ${plural(accepts.length, "way")} to pay${forWhat}: ${listJoin(
+          views.map((v) => v.text),
+          "or",
+        )}.${err}`;
   return make("x402.payment-required", `x402 payment required (v${version})`, summary, sections, flags, o);
 }
 
@@ -250,7 +315,9 @@ export function analyzePayload(payload: Obj, ctx: PaymentContext, now: number): 
       } catch (e) {
         return {
           sections: [section("Transaction", [field("Transaction (base64)", payload.transaction, "code")])],
-          flags: [flag("danger", "SVM_TX_UNPARSEABLE", `The transaction bytes don't parse as a Solana transaction: ${(e as Error).message}.`)],
+          flags: [
+            flag("danger", "SVM_TX_UNPARSEABLE", `The transaction bytes don't parse as a Solana transaction: ${(e as Error).message}.`),
+          ],
           summary: "Solana payment whose transaction can't be parsed.",
           sigPhrase: "Signature not checked.",
         };
@@ -267,7 +334,8 @@ export function decodePaymentPayload(o: Obj, now: number, requirements?: Obj): D
   const base: PaymentContext = reqSrc
     ? requirementContext(reqSrc, version)
     : { scheme: typeof o.scheme === "string" ? o.scheme : undefined, network: typeof o.network === "string" ? o.network : undefined };
-  if (accepted === undefined && requirements) base.amountLabel = "paymentRequirements." + (requirements.amount !== undefined ? "amount" : "maxAmountRequired");
+  if (accepted === undefined && requirements)
+    base.amountLabel = "paymentRequirements." + (requirements.amount !== undefined ? "amount" : "maxAmountRequired");
   // v1 payload carries scheme/network at top level; prefer them if no requirement
   if (!base.network && typeof o.network === "string") base.network = o.network;
   if (!base.scheme && typeof o.scheme === "string") base.scheme = o.scheme;
@@ -279,16 +347,38 @@ export function decodePaymentPayload(o: Obj, now: number, requirements?: Obj): D
   if (requirements && accepted) {
     // facilitator body with both: they must agree
     for (const k of ["network", "asset", "payTo", "amount", "scheme"]) {
-      if (requirements[k] !== undefined && accepted[k] !== undefined && String(requirements[k]).toLowerCase() !== String(accepted[k]).toLowerCase()) {
-        flags.push(flag("danger", "ACCEPTED_MISMATCH", `paymentPayload.accepted.${k} (${short(accepted[k], 10, 6)}) differs from paymentRequirements.${k} (${short(requirements[k], 10, 6)}).`));
+      if (
+        requirements[k] !== undefined &&
+        accepted[k] !== undefined &&
+        asText(requirements[k]).toLowerCase() !== asText(accepted[k]).toLowerCase()
+      ) {
+        flags.push(
+          flag(
+            "danger",
+            "ACCEPTED_MISMATCH",
+            `paymentPayload.accepted.${k} (${short(accepted[k], 10, 6)}) differs from paymentRequirements.${k} (${short(requirements[k], 10, 6)}).`,
+          ),
+        );
       }
     }
   }
   if (version === 1 && requirements && typeof o.network === "string" && requirements.network !== o.network) {
-    flags.push(flag("danger", "NETWORK_MISMATCH", `Payload network '${o.network}' differs from the requirements' '${String(requirements.network)}'.`));
+    flags.push(
+      flag(
+        "danger",
+        "NETWORK_MISMATCH",
+        `Payload network '${o.network}' differs from the requirements' '${asText(requirements.network)}'.`,
+      ),
+    );
   }
   if (!reqSrc && version === 1 && analysis && isRecord(payload.authorization)) {
-    flags.push(flag("info", "NO_REQUIREMENTS", "v1 payloads don't carry the requirements, so payTo, amount and asset can't be cross-checked. Paste the facilitator /verify body to check them."));
+    flags.push(
+      flag(
+        "info",
+        "NO_REQUIREMENTS",
+        "v1 payloads don't carry the requirements, so payTo, amount and asset can't be cross-checked. Paste the facilitator /verify body to check them.",
+      ),
+    );
   }
   let summary: string;
   if (analysis) {
@@ -296,15 +386,26 @@ export function decodePaymentPayload(o: Obj, now: number, requirements?: Obj): D
     sections.push(...analysis.sections);
     summary = analysis.summary;
   } else {
-    summary = `x402 ${String(base.scheme ?? "")} payment on ${networkInfo(base.network).name} with a payload paydecode doesn't know how to check.`;
-    flags.push(flag("warn", "PAYLOAD_UNKNOWN", `Payload fields (${Object.keys(payload).join(", ")}) don't match the EIP-3009, Permit2 or Solana exact formats.`));
-    sections.push(section("Payload", Object.entries(payload).map(([k, v]) => field(k, typeof v === "string" ? v : JSON.stringify(v), "code"))));
+    summary = `x402 ${asText(base.scheme, "")} payment on ${networkInfo(base.network).name} with a payload paydecode doesn't know how to check.`;
+    flags.push(
+      flag(
+        "warn",
+        "PAYLOAD_UNKNOWN",
+        `Payload fields (${Object.keys(payload).join(", ")}) don't match the EIP-3009, Permit2 or Solana exact formats.`,
+      ),
+    );
+    sections.push(
+      section(
+        "Payload",
+        Object.entries(payload).map(([k, v]) => field(k, typeof v === "string" ? v : JSON.stringify(v), "code")),
+      ),
+    );
   }
   if (accepted) sections.push(section("Accepted requirements", describeRequirement(accepted, version).fields));
   if (isRecord(o.resource)) sections.unshift(section("Resource", resourceFields(o)));
   else if (res) sections.unshift(section("Resource", [field("URL", res)]));
   sections.push(...extensionsSection(o.extensions));
-  const scheme = String(base.scheme ?? "");
+  const scheme = asText(base.scheme, "");
   return make("x402.payment-payload", `x402 payment (v${version}${scheme ? `, ${scheme}` : ""})`, summary, sections, flags, o);
 }
 
@@ -313,28 +414,45 @@ const PLACEHOLDER_TX = /^0x(1234567890abcdef){4}$/i;
 export function decodeSettleResponse(o: Obj): Decoded {
   const net = o.network !== undefined ? networkInfo(o.network) : undefined;
   const flags: Flag[] = [];
-  const tx = String(o.transaction ?? "");
+  const tx = asText(o.transaction, "");
   const payer = typeof o.payer === "string" ? o.payer : undefined;
   let summary: string;
   if (o.success) {
-    summary = `Settlement succeeded${net ? ` on ${net.name}` : ""}${tx ? `: transaction ${short(tx, 10, 6)}` : ""}${payer ? `, paid by ${short(payer)}` : ""}${o.amount !== undefined ? ` (charged ${String(o.amount)} atomic units)` : ""}.`;
+    summary = `Settlement succeeded${net ? ` on ${net.name}` : ""}${tx ? `: transaction ${short(tx, 10, 6)}` : ""}${payer ? `, paid by ${short(payer)}` : ""}${o.amount !== undefined ? ` (charged ${asText(o.amount)} atomic units)` : ""}.`;
     flags.push(flag("ok", "SETTLED", "The facilitator reports the payment landed on-chain."));
-    if (!tx) flags.push(flag("warn", "NO_TX_HASH", "Marked successful but no transaction hash was returned, so there's nothing to look up on-chain."));
+    if (!tx)
+      flags.push(
+        flag("warn", "NO_TX_HASH", "Marked successful but no transaction hash was returned, so there's nothing to look up on-chain."),
+      );
   } else {
     summary = `Settlement failed${net ? ` on ${net.name}` : ""}: ${explainError(o.errorReason ?? "no reason given")}.${typeof o.errorMessage === "string" ? ` "${o.errorMessage}"` : ""}${payer ? ` Payer ${short(payer)}.` : ""}`;
     flags.push(flag("danger", "SETTLE_FAILED", `Settlement failed: ${explainError(o.errorReason ?? "unknown")}. No money moved.`));
   }
-  if (PLACEHOLDER_TX.test(tx)) flags.push(flag("info", "PLACEHOLDER_TX", "The transaction hash looks like a documentation placeholder (0x1234567890abcdef...), not a real transaction."));
+  if (PLACEHOLDER_TX.test(tx))
+    flags.push(
+      flag(
+        "info",
+        "PLACEHOLDER_TX",
+        "The transaction hash looks like a documentation placeholder (0x1234567890abcdef...), not a real transaction.",
+      ),
+    );
   const fields: Field[] = [
-    field("Success", String(o.success)),
+    field("Success", asText(o.success)),
     ...(o.errorReason ? [field("Error reason", explainError(o.errorReason))] : []),
-    ...(o.errorMessage ? [field("Error message", String(o.errorMessage))] : []),
+    ...(o.errorMessage ? [field("Error message", asText(o.errorMessage))] : []),
     ...(tx ? [field("Transaction", tx, "hash")] : []),
-    ...(net ? [field("Network", net.name, "text", net.caip2 ?? String(o.network))] : []),
+    ...(net ? [field("Network", net.name, "text", net.caip2 ?? asText(o.network))] : []),
     ...(payer ? [field("Payer", payer, "address")] : []),
-    ...(o.amount !== undefined ? [field("Amount charged", String(o.amount), "amount")] : []),
+    ...(o.amount !== undefined ? [field("Amount charged", asText(o.amount), "amount")] : []),
   ];
-  return make("x402.settle-response", "x402 settlement response", summary, [section("Settlement", fields), ...extensionsSection(o.extensions)], flags, o);
+  return make(
+    "x402.settle-response",
+    "x402 settlement response",
+    summary,
+    [section("Settlement", fields), ...extensionsSection(o.extensions)],
+    flags,
+    o,
+  );
 }
 
 export function decodeVerifyResponse(o: Obj): Decoded {
@@ -349,13 +467,17 @@ export function decodeVerifyResponse(o: Obj): Decoded {
     summary,
     [
       section("Verification", [
-        field("Valid", String(o.isValid)),
+        field("Valid", asText(o.isValid)),
         ...(o.invalidReason ? [field("Reason", explainError(o.invalidReason))] : []),
-        ...(o.invalidMessage ? [field("Message", String(o.invalidMessage))] : []),
+        ...(o.invalidMessage ? [field("Message", asText(o.invalidMessage))] : []),
         ...(payer ? [field("Payer", payer, "address")] : []),
       ]),
     ],
-    [ok ? flag("ok", "VERIFIED", "Facilitator verification passed.") : flag("danger", "VERIFY_FAILED", `Verification failed: ${explainError(o.invalidReason ?? "unknown")}.`)],
+    [
+      ok
+        ? flag("ok", "VERIFIED", "Facilitator verification passed.")
+        : flag("danger", "VERIFY_FAILED", `Verification failed: ${explainError(o.invalidReason ?? "unknown")}.`),
+    ],
     o,
   );
 }
@@ -381,21 +503,37 @@ export function decodeSupported(o: Obj): Decoded {
   const kinds = (o.kinds as Obj[]).filter(isRecord);
   const byScheme = new Map<string, Set<string>>();
   for (const k of kinds) {
-    const s = `${String(k.scheme)} (v${String(k.x402Version ?? "?")})`;
+    const s = `${asText(k.scheme)} (v${asText(k.x402Version, "?")})`;
     if (!byScheme.has(s)) byScheme.set(s, new Set());
     byScheme.get(s)!.add(networkInfo(k.network).name);
   }
   const parts = [...byScheme.entries()].map(([s, nets]) => `${s} on ${listJoin([...nets])}`);
   const signers = isRecord(o.signers) ? o.signers : {};
-  const fields = kinds.map((k) => field(`${String(k.scheme)} v${String(k.x402Version ?? "?")}`, networkInfo(k.network).name, "text", `${String(k.network)}${isRecord(k.extra) ? ` extra ${JSON.stringify(k.extra)}` : ""}`));
+  const fields = kinds.map((k) =>
+    field(
+      `${asText(k.scheme)} v${asText(k.x402Version, "?")}`,
+      networkInfo(k.network).name,
+      "text",
+      `${asText(k.network)}${isRecord(k.extra) ? ` extra ${JSON.stringify(k.extra)}` : ""}`,
+    ),
+  );
   return make(
     "x402.supported",
     "x402 facilitator /supported",
     `Facilitator supports ${plural(kinds.length, "scheme/network pair")}: ${parts.join("; ")}.`,
     [
       section("Supported kinds", fields),
-      ...(Object.keys(signers).length ? [section("Signers", Object.entries(signers).map(([k, v]) => field(k, Array.isArray(v) ? v.join(", ") : JSON.stringify(v), "address")))] : []),
-      ...(Array.isArray(o.extensions) && o.extensions.length ? [section("Extensions", [field("Extensions", (o.extensions as unknown[]).map(String).join(", "))])] : []),
+      ...(Object.keys(signers).length
+        ? [
+            section(
+              "Signers",
+              Object.entries(signers).map(([k, v]) => field(k, Array.isArray(v) ? v.join(", ") : JSON.stringify(v), "address")),
+            ),
+          ]
+        : []),
+      ...(Array.isArray(o.extensions) && o.extensions.length
+        ? [section("Extensions", [field("Extensions", (o.extensions as unknown[]).map(String).join(", "))])]
+        : []),
     ],
     [],
     o,
@@ -404,5 +542,12 @@ export function decodeSupported(o: Obj): Decoded {
 
 export function decodeRequirement(o: Obj): Decoded {
   const v = describeRequirement(o, o.amount !== undefined ? 2 : 1);
-  return make("x402.payment-requirements", "x402 payment requirements", `Requirement to pay ${v.text}.`, [section("Requirement", v.fields)], v.flags, o);
+  return make(
+    "x402.payment-requirements",
+    "x402 payment requirements",
+    `Requirement to pay ${v.text}.`,
+    [section("Requirement", v.fields)],
+    v.flags,
+    o,
+  );
 }

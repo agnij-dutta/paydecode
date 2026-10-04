@@ -28,6 +28,7 @@ import {
 } from "./networks.js";
 import { field, flag, formatUnits, formatDay, duration, relative, short, timeField, toUnix, section } from "./format.js";
 import { isRecord } from "./encoding.js";
+import { asText } from "./format.js";
 
 /** What the surrounding artifact says this payment should look like. */
 export interface PaymentContext {
@@ -91,7 +92,7 @@ const PERMIT2_UPTO_TYPES: TypeMap = {
 };
 
 const hex0x = (s: unknown) => {
-  const v = String(s ?? "");
+  const v = asText(s, "");
   return v.startsWith("0x") || v.startsWith("0X") ? v : "0x" + v;
 };
 
@@ -102,7 +103,7 @@ function tokenLabel(tk: EvmToken | undefined, chainId?: number): string {
 
 export function amountText(value: unknown, tk: EvmToken | undefined, asset?: string): string {
   if (tk) return `${formatUnits(value, tk.decimals)} ${tk.symbol}`;
-  return `${String(value)} atomic units of ${asset ? short(asset) : "an unknown token"}`;
+  return `${asText(value)} atomic units of ${asset ? short(asset) : "an unknown token"}`;
 }
 
 interface DomainHit {
@@ -125,7 +126,7 @@ function searchDomains(
   if (!recover) return undefined;
   const structHash = hashStructTyped(primary, types, message);
   for (const d of candidates) {
-    const key = JSON.stringify([d.name, d.version, String(d.chainId), String(d.verifyingContract).toLowerCase()]);
+    const key = JSON.stringify([d.name, d.version, asText(d.chainId), asText(d.verifyingContract).toLowerCase()]);
     if (seen.has(key)) continue;
     seen.add(key);
     let digest: Uint8Array;
@@ -171,7 +172,7 @@ function domainCandidates(chainId: number | undefined, asset: string | undefined
 }
 
 const domainText = (d: Domain) =>
-  `name '${d.name}', version '${d.version}', chainId ${String(d.chainId)}, verifyingContract ${short(d.verifyingContract)}`;
+  `name '${d.name}', version '${d.version}', chainId ${asText(d.chainId)}, verifyingContract ${short(d.verifyingContract)}`;
 
 export interface SigVerdict {
   flags: Flag[];
@@ -185,14 +186,10 @@ export interface SigVerdict {
  * Verify an EIP-3009 signature and, if it fails, figure out *why*: wrong
  * domain name/version, wrong chain, wrong token, or a genuinely bad signature.
  */
-export function verifyEip3009Signature(
-  auth: Record<string, unknown>,
-  signature: string,
-  ctx: PaymentContext,
-): SigVerdict {
+export function verifyEip3009Signature(auth: Record<string, unknown>, signature: string, ctx: PaymentContext): SigVerdict {
   const flags: Flag[] = [];
   const fields: Field[] = [];
-  const from = String(auth.from ?? "");
+  const from = asText(auth.from, "");
   const message = { ...auth, nonce: hex0x(auth.nonce) };
   const sig = hex0x(signature);
   const net = ctx.network ? networkInfo(ctx.network) : undefined;
@@ -203,17 +200,24 @@ export function verifyEip3009Signature(
   const extraVersion = typeof ctx.extra?.version === "string" ? ctx.extra.version : undefined;
 
   if (!isEvmAddress(from)) {
-    flags.push(flag("danger", "AUTH_FROM_INVALID", `authorization.from (${from || "missing"}) is not an EVM address.`));
+    flags.push(flag("danger", "AUTH_FROM_INVALID", `authorization.from (${asText(auth.from, "missing")}) is not an EVM address.`));
     return { flags, phrase: "Signature could not be checked.", fields };
   }
   const bad: string[] = [];
-  if (!isEvmAddress(auth.to)) bad.push(`to (${String(auth.to ?? "missing")}) is not an address`);
+  if (!isEvmAddress(auth.to)) bad.push(`to (${asText(auth.to, "missing")}) is not an address`);
   for (const k of ["value", "validAfter", "validBefore"]) {
-    if (!/^\d+$/.test(String(auth[k] ?? ""))) bad.push(`${k} (${String(auth[k] ?? "missing")}) is not a non-negative integer`);
+    if (!/^\d+$/.test(asText(auth[k], ""))) bad.push(`${k} (${asText(auth[k], "missing")}) is not a non-negative integer`);
   }
-  if (!/^(0x)?[0-9a-fA-F]{1,64}$/.test(String(auth.nonce ?? ""))) bad.push(`nonce (${short(String(auth.nonce ?? "missing"), 10, 4)}) is not bytes32 hex`);
+  if (!/^(0x)?[0-9a-fA-F]{1,64}$/.test(asText(auth.nonce, "")))
+    bad.push(`nonce (${short(asText(auth.nonce, "missing"), 10, 4)}) is not bytes32 hex`);
   if (bad.length) {
-    flags.push(flag("danger", "AUTH_FIELD_INVALID", `The authorization is malformed: ${bad.join("; ")}. No token contract will accept it, and the signature can't be checked.`));
+    flags.push(
+      flag(
+        "danger",
+        "AUTH_FIELD_INVALID",
+        `The authorization is malformed: ${bad.join("; ")}. No token contract will accept it, and the signature can't be checked.`,
+      ),
+    );
     return { flags, phrase: "Signature not checked (malformed authorization).", fields };
   }
   const sigBytes = sig.length - 2;
@@ -248,7 +252,15 @@ export function verifyEip3009Signature(
   const onchainOk = onchain ? (domainsDiffer ? sameAddress(tryD(onchain), from) : claimedOk) : false;
   const tl = tokenLabel(token, chainId);
 
-  if (onchain) fields.push(field("On-chain EIP-712 domain", domainText(onchain), "code", token!.source === "onchain" ? "verified against the deployed contract" : "from x402's default asset table"));
+  if (onchain)
+    fields.push(
+      field(
+        "On-chain EIP-712 domain",
+        domainText(onchain),
+        "code",
+        token!.source === "onchain" ? "verified against the deployed contract" : "from x402's default asset table",
+      ),
+    );
 
   if (claimed && onchain && !domainsDiffer && claimedOk) {
     flags.push(flag("ok", "SIG_VALID", `Signature valid: recovers to ${short(from)} (the 'from' address) under ${tl}'s on-chain domain.`));
@@ -256,17 +268,22 @@ export function verifyEip3009Signature(
     return { flags, phrase: "Signature valid.", fields };
   }
   if (domainsDiffer && claimedOk) {
-    const what = claimed!.name !== onchain!.name ? `name '${claimed!.name}'` : `version '${claimed!.version}'`;
-    const real = claimed!.name !== onchain!.name ? `domain name is '${onchain!.name}'` : `domain version is '${onchain!.version}'`;
+    const what = claimed.name !== onchain.name ? `name '${claimed.name}'` : `version '${claimed.version}'`;
+    const real = claimed.name !== onchain.name ? `domain name is '${onchain.name}'` : `domain version is '${onchain.version}'`;
     flags.push(
       flag(
         "danger",
         "EIP712_DOMAIN_MISMATCH",
-        `Signed with ${what} (copied from the requirements' extra) but ${tl}'s ${real}. The signature is internally consistent, yet the token contract computes a different digest, so transferWithAuthorization will revert with "invalid signature". Fix extra.${claimed!.name !== onchain!.name ? "name" : "version"} to '${claimed!.name !== onchain!.name ? onchain!.name : onchain!.version}' and re-sign.`,
+        `Signed with ${what} (copied from the requirements' extra) but ${tl}'s ${real}. The signature is internally consistent, yet the token contract computes a different digest, so transferWithAuthorization will revert with "invalid signature". Fix extra.${claimed.name !== onchain.name ? "name" : "version"} to '${claimed.name !== onchain.name ? onchain.name : onchain.version}' and re-sign.`,
       ),
     );
     fields.push(field("Recovered signer", checksumAddress(from), "address", "matches from, but only under the wrong domain"));
-    return { flags, phrase: `Signature will be rejected on-chain: signed with ${what} but ${tl}'s ${real}.`, fields, hit: { domain: claimed!, token, recovered: from } };
+    return {
+      flags,
+      phrase: `Signature will be rejected on-chain: signed with ${what} but ${tl}'s ${real}.`,
+      fields,
+      hit: { domain: claimed, token, recovered: from },
+    };
   }
   if (domainsDiffer && onchainOk) {
     flags.push(flag("ok", "SIG_VALID", `Signature valid: recovers to ${short(from)} under ${tl}'s on-chain domain.`));
@@ -274,7 +291,7 @@ export function verifyEip3009Signature(
       flag(
         "warn",
         "EXTRA_DOMAIN_WRONG",
-        `The requirements advertise extra.name/version '${extraName}'/'${extraVersion}', but ${tl}'s on-chain domain is '${onchain!.name}'/'${onchain!.version}'. This client ignored extra and signed correctly; clients that trust extra will produce signatures the contract rejects.`,
+        `The requirements advertise extra.name/version '${extraName}'/'${extraVersion}', but ${tl}'s on-chain domain is '${onchain.name}'/'${onchain.version}'. This client ignored extra and signed correctly; clients that trust extra will produce signatures the contract rejects.`,
       ),
     );
     return { flags, phrase: "Signature valid.", fields };
@@ -291,7 +308,14 @@ export function verifyEip3009Signature(
   }
 
   // Nothing obvious worked: search every domain we know.
-  const hit = searchDomains(domainCandidates(chainId, asset, ctx.extra), TRANSFER_WITH_AUTHORIZATION, "TransferWithAuthorization", message, sig, from);
+  const hit = searchDomains(
+    domainCandidates(chainId, asset, ctx.extra),
+    TRANSFER_WITH_AUTHORIZATION,
+    "TransferWithAuthorization",
+    message,
+    sig,
+    from,
+  );
   if (hit) {
     const htk = hit.token;
     const hd = hit.domain;
@@ -305,7 +329,7 @@ export function verifyEip3009Signature(
         flag(
           "danger",
           "SIG_WRONG_CHAIN",
-          `Signature was made for chainId ${String(hd.chainId)} (${chainName(Number(hd.chainId))}) but this payment is on ${net?.name} (chainId ${chainId}). It will not verify on ${net?.name}.`,
+          `Signature was made for chainId ${asText(hd.chainId)} (${chainName(Number(hd.chainId))}) but this payment is on ${net?.name} (chainId ${chainId}). It will not verify on ${net?.name}.`,
         ),
       );
     } else if (wrongToken) {
@@ -350,7 +374,13 @@ export function verifyEip3009Signature(
         ),
       );
       if (claimed && (claimed.name !== hd.name || claimed.version !== hd.version)) {
-        flags.push(flag("warn", "EXTRA_DOMAIN_WRONG", `The requirements' extra says '${claimed.name}'/'${claimed.version}', but the signature (correctly) used '${hd.name}'/'${hd.version}'.`));
+        flags.push(
+          flag(
+            "warn",
+            "EXTRA_DOMAIN_WRONG",
+            `The requirements' extra says '${claimed.name}'/'${claimed.version}', but the signature (correctly) used '${hd.name}'/'${hd.version}'.`,
+          ),
+        );
       }
       return { flags, phrase: contextless ? `Signature valid (as ${htl}).` : "Signature valid.", fields, hit };
     }
@@ -376,7 +406,13 @@ export function verifyEip3009Signature(
 function windowFlags(after: number | undefined, before: number | undefined, now: number, ctx: PaymentContext): Flag[] {
   const flags: Flag[] = [];
   if (before !== undefined && before <= now) {
-    flags.push(flag("danger", "AUTH_EXPIRED", `Expired ${relative(before, now)} (validBefore ${formatDay(before)}). A facilitator will reject it; the payer must sign a fresh one.`));
+    flags.push(
+      flag(
+        "danger",
+        "AUTH_EXPIRED",
+        `Expired ${relative(before, now)} (validBefore ${formatDay(before)}). A facilitator will reject it; the payer must sign a fresh one.`,
+      ),
+    );
   }
   if (after !== undefined && after > now) {
     flags.push(flag("warn", "AUTH_NOT_YET_VALID", `Not valid yet: becomes usable ${relative(after, now)}. Settling before then reverts.`));
@@ -386,12 +422,25 @@ function windowFlags(after: number | undefined, before: number | undefined, now:
     const span = before - start;
     const limit = Math.max(3600, (ctx.maxTimeoutSeconds ?? 0) + 600 + 60);
     if (span > 30 * 86400) {
-      flags.push(flag("danger", "AUTH_WINDOW_HUGE", `Stays spendable for ${duration(span)}. Anyone who obtains this blob can submit it until ${formatDay(before)}. x402 clients normally sign windows of a few minutes.`));
+      flags.push(
+        flag(
+          "danger",
+          "AUTH_WINDOW_HUGE",
+          `Stays spendable for ${duration(span)}. Anyone who obtains this blob can submit it until ${formatDay(before)}. x402 clients normally sign windows of a few minutes.`,
+        ),
+      );
     } else if (span > limit) {
-      flags.push(flag("warn", "AUTH_WINDOW_LONG", `Unusually long validity window (${duration(span)}). The reference x402 client signs for maxTimeoutSeconds plus 10 minutes; a long window widens the replay/front-run window if the blob leaks.`));
+      flags.push(
+        flag(
+          "warn",
+          "AUTH_WINDOW_LONG",
+          `Unusually long validity window (${duration(span)}). The reference x402 client signs for maxTimeoutSeconds plus 10 minutes; a long window widens the replay/front-run window if the blob leaks.`,
+        ),
+      );
     }
   }
-  if (after === 0) flags.push(flag("info", "AUTH_NO_START", "validAfter is 0, so the authorization is usable immediately (no start time)."));
+  if (after === 0)
+    flags.push(flag("info", "AUTH_NO_START", "validAfter is 0, so the authorization is usable immediately (no start time)."));
   return flags;
 }
 
@@ -399,15 +448,15 @@ function amountFlags(value: unknown, ctx: PaymentContext, tk: EvmToken | undefin
   const flags: Flag[] = [];
   let v: bigint;
   try {
-    v = BigInt(String(value));
+    v = BigInt(asText(value));
   } catch {
-    return [flag("danger", "AMOUNT_INVALID", `Amount '${String(value)}' is not an integer.`)];
+    return [flag("danger", "AMOUNT_INVALID", `Amount '${asText(value)}' is not an integer.`)];
   }
   if (v === 0n) flags.push(flag("warn", "AMOUNT_ZERO", "Authorizes a transfer of 0. Facilitators usually reject zero-value payments."));
   if (ctx.amount !== undefined) {
     let req: bigint | undefined;
     try {
-      req = BigInt(String(ctx.amount));
+      req = BigInt(asText(ctx.amount));
     } catch {
       req = undefined;
     }
@@ -415,9 +464,21 @@ function amountFlags(value: unknown, ctx: PaymentContext, tk: EvmToken | undefin
     if (req !== undefined) {
       const upto = ctx.scheme === "upto";
       if (v > req && !upto) {
-        flags.push(flag("danger", "AMOUNT_OVERPAY", `Signs for ${amountText(v, tk, ctx.asset)} but ${label} is ${amountText(req, tk, ctx.asset)}. The payer would overpay by ${amountText(v - req, tk, ctx.asset)}.`));
+        flags.push(
+          flag(
+            "danger",
+            "AMOUNT_OVERPAY",
+            `Signs for ${amountText(v, tk, ctx.asset)} but ${label} is ${amountText(req, tk, ctx.asset)}. The payer would overpay by ${amountText(v - req, tk, ctx.asset)}.`,
+          ),
+        );
       } else if (v < req) {
-        flags.push(flag("warn", "AMOUNT_UNDERPAY", `Signs for ${amountText(v, tk, ctx.asset)} but ${label} is ${amountText(req, tk, ctx.asset)}. The server should reject this as insufficient.`));
+        flags.push(
+          flag(
+            "warn",
+            "AMOUNT_UNDERPAY",
+            `Signs for ${amountText(v, tk, ctx.asset)} but ${label} is ${amountText(req, tk, ctx.asset)}. The server should reject this as insufficient.`,
+          ),
+        );
       } else if (!upto || v === req) {
         flags.push(flag("ok", "AMOUNT_MATCHES", `Amount matches ${label} (${amountText(req, tk, ctx.asset)}).`));
       }
@@ -432,20 +493,38 @@ function assetFlags(ctx: PaymentContext, tk: EvmToken | undefined, chainId: numb
   if (!tk) {
     const elsewhere = tokensAtAddress(ctx.asset);
     if (elsewhere.length && chainId !== undefined) {
-      flags.push(flag("danger", "ASSET_WRONG_CHAIN", `Asset ${short(ctx.asset)} is ${elsewhere.map((e) => `${chainName(e.chainId)} ${e.symbol}`).join(", ")}, but this payment is on ${chainName(chainId)}. On ${chainName(chainId)} that address is not the token you think it is.`));
+      flags.push(
+        flag(
+          "danger",
+          "ASSET_WRONG_CHAIN",
+          `Asset ${short(ctx.asset)} is ${elsewhere.map((e) => `${chainName(e.chainId)} ${e.symbol}`).join(", ")}, but this payment is on ${chainName(chainId)}. On ${chainName(chainId)} that address is not the token you think it is.`,
+        ),
+      );
     } else {
-      flags.push(flag("warn", "UNKNOWN_ASSET", `Asset ${short(ctx.asset)} isn't a token paydecode knows${chainId !== undefined ? ` on ${chainName(chainId)}` : ""}. Decimals are unknown, so amounts are shown in raw atomic units. Check the contract before trusting the price.`));
+      flags.push(
+        flag(
+          "warn",
+          "UNKNOWN_ASSET",
+          `Asset ${short(ctx.asset)} isn't a token paydecode knows${chainId !== undefined ? ` on ${chainName(chainId)}` : ""}. Decimals are unknown, so amounts are shown in raw atomic units. Check the contract before trusting the price.`,
+        ),
+      );
     }
   } else if (tk.source === "x402-default") {
-    flags.push(flag("info", "ASSET_FROM_X402_TABLE", `${tk.symbol} on ${chainName(tk.chainId)} matches x402's default asset table (domain not independently verified on-chain).`));
+    flags.push(
+      flag(
+        "info",
+        "ASSET_FROM_X402_TABLE",
+        `${tk.symbol} on ${chainName(tk.chainId)} matches x402's default asset table (domain not independently verified on-chain).`,
+      ),
+    );
   }
   return flags;
 }
 
 /** Decode + verify an exact/EVM EIP-3009 payload. */
 export function analyzeEip3009(payload: Record<string, unknown>, ctx: PaymentContext, now: number): Analysis {
-  const auth = (isRecord(payload.authorization) ? payload.authorization : {}) as Record<string, unknown>;
-  const signature = String(payload.signature ?? "");
+  const auth = isRecord(payload.authorization) ? payload.authorization : {};
+  const signature = asText(payload.signature, "");
   const net = ctx.network ? networkInfo(ctx.network) : undefined;
   const chainId = net?.chainId;
   const tk = findEvmToken(chainId, ctx.asset);
@@ -453,8 +532,8 @@ export function analyzeEip3009(payload: Record<string, unknown>, ctx: PaymentCon
 
   const after = toUnix(auth.validAfter);
   const before = toUnix(auth.validBefore);
-  const from = String(auth.from ?? "");
-  const to = String(auth.to ?? "");
+  const from = asText(auth.from, "");
+  const to = asText(auth.to, "");
 
   const sig = verifyEip3009Signature(auth, signature, ctx);
   // If we inferred the token from the signature (no network in the artifact), use it for display.
@@ -479,10 +558,17 @@ export function analyzeEip3009(payload: Record<string, unknown>, ctx: PaymentCon
   flags.push(...assetFlags(ctx, tk, chainId));
   if (ctx.payTo && isEvmAddress(ctx.payTo) && isEvmAddress(to)) {
     if (!sameAddress(ctx.payTo, to)) {
-      flags.push(flag("danger", "PAYTO_MISMATCH", `Pays ${short(to)} but the requirements say payTo is ${short(ctx.payTo)}. Money would go to the wrong address; the server should refuse it.`));
+      flags.push(
+        flag(
+          "danger",
+          "PAYTO_MISMATCH",
+          `Pays ${short(to)} but the requirements say payTo is ${short(ctx.payTo)}. Money would go to the wrong address; the server should refuse it.`,
+        ),
+      );
     } else flags.push(flag("ok", "PAYTO_MATCHES", `Recipient matches the requirements' payTo (${short(to)}).`));
   }
-  if (isEvmAddress(from) && sameAddress(from, to)) flags.push(flag("warn", "SELF_PAYMENT", "from and to are the same address: this pays itself."));
+  if (isEvmAddress(from) && sameAddress(from, to))
+    flags.push(flag("warn", "SELF_PAYMENT", "from and to are the same address: this pays itself."));
   if (typeof auth.nonce === "string" && !/^(0x)?[0-9a-fA-F]{64}$/.test(auth.nonce)) {
     flags.push(flag("warn", "NONCE_FORMAT", `Nonce '${short(auth.nonce, 10, 4)}' is not 32 bytes of hex; EIP-3009 nonces are bytes32.`));
   }
@@ -490,26 +576,41 @@ export function analyzeEip3009(payload: Record<string, unknown>, ctx: PaymentCon
   const fields: Field[] = [
     field("Payer (from)", from, "address"),
     field("Recipient (to)", to, "address"),
-    field("Amount", amt, "amount", `raw value ${String(auth.value)}`),
+    field("Amount", amt, "amount", `raw value ${asText(auth.value)}`),
     field("Network", shownNet ?? "not stated", "text", net?.caip2),
     ...(ctx.asset ? [field("Asset", ctx.asset, "address", tk ? `${tk.symbol}, ${tk.decimals} decimals` : "unknown token")] : []),
     timeField("Valid after", after, now, auth.validAfter),
     timeField("Valid before", before, now, auth.validBefore),
     ...(after !== undefined && before !== undefined
-      ? [field("Window", duration(before - (after > 0 ? after : now)), "text", after > 0 ? undefined : "measured from now, since validAfter is 0")]
+      ? [
+          field(
+            "Window",
+            duration(before - (after > 0 ? after : now)),
+            "text",
+            after > 0 ? undefined : "measured from now, since validAfter is 0",
+          ),
+        ]
       : []),
-    field("Nonce", String(auth.nonce ?? ""), "hash"),
+    field("Nonce", asText(auth.nonce, ""), "hash"),
   ];
 
   let when: string;
   if (after !== undefined && before !== undefined && after > 0) when = `valid for ${duration(before - after)} starting ${formatDay(after)}`;
   else if (before !== undefined) when = `valid until ${formatDay(before)}`;
   else when = "with no stated validity window";
-  const state = before !== undefined && before <= now ? ` (expired ${relative(before, now)})` : after !== undefined && after > now ? ` (not valid until ${relative(after, now)})` : "";
+  const state =
+    before !== undefined && before <= now
+      ? ` (expired ${relative(before, now)})`
+      : after !== undefined && after > now
+        ? ` (not valid until ${relative(after, now)})`
+        : "";
   const summary = `Authorizes ${short(from)} to pay ${amt}${shownNet ? ` on ${shownNet.replace(" (inferred from signature)", "")}` : ""} to ${short(to)}, ${when}${state}. ${sig.phrase}`;
 
   return {
-    sections: [section("EIP-3009 transfer authorization", fields), section("Signature", [field("Signature", signature, "code"), ...sig.fields])],
+    sections: [
+      section("EIP-3009 transfer authorization", fields),
+      section("Signature", [field("Signature", signature, "code"), ...sig.fields]),
+    ],
     flags,
     summary,
     sigPhrase: sig.phrase,
@@ -519,16 +620,16 @@ export function analyzeEip3009(payload: Record<string, unknown>, ctx: PaymentCon
 
 /** Decode + verify an exact/upto EVM Permit2 payload. */
 export function analyzePermit2(payload: Record<string, unknown>, ctx: PaymentContext, now: number): Analysis {
-  const p = (isRecord(payload.permit2Authorization) ? payload.permit2Authorization : {}) as Record<string, unknown>;
-  const permitted = (isRecord(p.permitted) ? p.permitted : {}) as Record<string, unknown>;
-  const witness = (isRecord(p.witness) ? p.witness : {}) as Record<string, unknown>;
+  const p = isRecord(payload.permit2Authorization) ? payload.permit2Authorization : {};
+  const permitted = isRecord(p.permitted) ? p.permitted : {};
+  const witness = isRecord(p.witness) ? p.witness : {};
   const signature = hex0x(payload.signature);
   const net = ctx.network ? networkInfo(ctx.network) : undefined;
   const chainId = net?.chainId;
-  const token = String(permitted.token ?? ctx.asset ?? "");
+  const token = asText(permitted.token, ctx.asset ?? "");
   const tk = findEvmToken(chainId, token);
-  const from = String(p.from ?? "");
-  const to = String(witness.to ?? "");
+  const from = asText(p.from, "");
+  const to = asText(witness.to, "");
   const deadline = toUnix(p.deadline);
   const validAfter = toUnix(witness.validAfter);
   const isUpto = "facilitator" in witness || ctx.scheme === "upto";
@@ -552,7 +653,14 @@ export function analyzePermit2(payload: Record<string, unknown>, ctx: PaymentCon
           : `Spender is ${short(p.spender)}, not the x402 Permit2 proxy (${short(expectedSpender)}). Permit2 lets the spender move these tokens anywhere, so this signature hands ${amt} to an arbitrary contract instead of enforcing the witness recipient.`,
       ),
     );
-  } else flags.push(flag("ok", "PERMIT2_SPENDER_OK", `Spender is the canonical x402 ${isUpto ? "upto" : "exact"} Permit2 proxy, which enforces the witness recipient.`));
+  } else
+    flags.push(
+      flag(
+        "ok",
+        "PERMIT2_SPENDER_OK",
+        `Spender is the canonical x402 ${isUpto ? "upto" : "exact"} Permit2 proxy, which enforces the witness recipient.`,
+      ),
+    );
 
   // Signature
   let sigPhrase = "Signature INVALID.";
@@ -562,7 +670,7 @@ export function analyzePermit2(payload: Record<string, unknown>, ctx: PaymentCon
     sigPhrase = "Signature not checked (no network).";
   } else {
     const dom = (cid: number): Domain => ({ name: "Permit2", chainId: cid, verifyingContract: PERMIT2_ADDRESS });
-    let rec: string | null = null;
+    let rec: string | null;
     try {
       rec = recoverAddress(typedDataHash(dom(chainId), types, "PermitWitnessTransferFrom", message), signature);
     } catch {
@@ -587,7 +695,13 @@ export function analyzePermit2(payload: Record<string, unknown>, ctx: PaymentCon
         }
       }
       if (other !== undefined) {
-        flags.push(flag("danger", "SIG_WRONG_CHAIN", `Permit2 signature was made for ${chainName(other)} (chainId ${other}), not ${net!.name}. It will not verify here.`));
+        flags.push(
+          flag(
+            "danger",
+            "SIG_WRONG_CHAIN",
+            `Permit2 signature was made for ${chainName(other)} (chainId ${other}), not ${net!.name}. It will not verify here.`,
+          ),
+        );
         sigPhrase = `Signature is for ${chainName(other)}, not ${net!.name}.`;
       } else {
         flags.push(
@@ -610,22 +724,36 @@ export function analyzePermit2(payload: Record<string, unknown>, ctx: PaymentCon
     flags.push(flag("danger", "PERMIT2_TOKEN_MISMATCH", `Permits token ${short(token)} but the requirements ask for ${short(ctx.asset)}.`));
   }
   if (ctx.payTo && isEvmAddress(ctx.payTo) && isEvmAddress(to)) {
-    if (!sameAddress(ctx.payTo, to)) flags.push(flag("danger", "PAYTO_MISMATCH", `Witness recipient is ${short(to)} but the requirements say payTo is ${short(ctx.payTo)}.`));
+    if (!sameAddress(ctx.payTo, to))
+      flags.push(
+        flag("danger", "PAYTO_MISMATCH", `Witness recipient is ${short(to)} but the requirements say payTo is ${short(ctx.payTo)}.`),
+      );
     else flags.push(flag("ok", "PAYTO_MATCHES", `Witness recipient matches payTo (${short(to)}).`));
   }
-  flags.push(flag("info", "PERMIT2_APPROVAL_NEEDED", `Permit2 only works if ${short(from)} has approved the Permit2 contract for this token (or the payload carries an eip2612GasSponsoring / erc20ApprovalGasSponsoring extension).`));
+  flags.push(
+    flag(
+      "info",
+      "PERMIT2_APPROVAL_NEEDED",
+      `Permit2 only works if ${short(from)} has approved the Permit2 contract for this token (or the payload carries an eip2612GasSponsoring / erc20ApprovalGasSponsoring extension).`,
+    ),
+  );
 
   const fields: Field[] = [
     field("Payer (from)", from, "address"),
     field("Recipient (witness.to)", to, "address"),
-    ...(isUpto ? [field("Facilitator (witness.facilitator)", String(witness.facilitator ?? ""), "address")] : []),
-    field(isUpto ? "Maximum amount" : "Amount", amt, "amount", `raw ${String(permitted.amount)}`),
+    ...(isUpto ? [field("Facilitator (witness.facilitator)", asText(witness.facilitator, ""), "address")] : []),
+    field(isUpto ? "Maximum amount" : "Amount", amt, "amount", `raw ${asText(permitted.amount)}`),
     field("Token", token, "address", tk ? `${tk.symbol}, ${tk.decimals} decimals` : "unknown token"),
-    field("Spender", String(p.spender ?? ""), "address", sameAddress(p.spender, expectedSpender) ? "x402 Permit2 proxy" : "NOT the x402 proxy"),
+    field(
+      "Spender",
+      asText(p.spender, ""),
+      "address",
+      sameAddress(p.spender, expectedSpender) ? "x402 Permit2 proxy" : "NOT the x402 proxy",
+    ),
     field("Network", net?.name ?? "not stated", "text", net?.caip2),
     timeField("Valid after (witness)", validAfter, now, witness.validAfter),
     timeField("Deadline", deadline, now, p.deadline),
-    field("Permit2 nonce", String(p.nonce ?? ""), "code"),
+    field("Permit2 nonce", asText(p.nonce, ""), "code"),
   ];
   const state = deadline !== undefined && deadline <= now ? ` (expired ${relative(deadline, now)})` : "";
   const summary = `Permit2 authorization for ${short(from)} to pay ${isUpto ? "up to " : ""}${amt}${net ? ` on ${net.name}` : ""} to ${short(to)} through ${sameAddress(p.spender, expectedSpender) ? "the x402 proxy" : `spender ${short(p.spender)}`}, valid until ${deadline !== undefined ? formatDay(deadline) : "an unstated deadline"}${state}. ${sigPhrase}`;

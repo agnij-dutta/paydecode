@@ -43,7 +43,15 @@ async function permit2Payload(opts: { spender?: string; chainId?: number; networ
   });
   return {
     x402Version: 2,
-    accepted: { scheme: "exact", network: opts.network ?? "eip155:8453", amount: "2500000", asset: USDC_BASE, payTo: PAY_TO, maxTimeoutSeconds: 300, extra: { assetTransferMethod: "permit2", name: "USD Coin", version: "2" } },
+    accepted: {
+      scheme: "exact",
+      network: opts.network ?? "eip155:8453",
+      amount: "2500000",
+      asset: USDC_BASE,
+      payTo: PAY_TO,
+      maxTimeoutSeconds: 300,
+      extra: { assetTransferMethod: "permit2", name: "USD Coin", version: "2" },
+    },
     payload: {
       signature,
       permit2Authorization: {
@@ -65,7 +73,9 @@ describe("x402 exact / Permit2", () => {
     expect(d.summary).toBe(
       "Permit2 authorization for 0xf39F…2266 to pay 2.50 USDC on Base to 0x2096…287C through the x402 proxy, valid until 21 Sep 2026. Signature valid.",
     );
-    expect(codes(d)).toEqual(expect.arrayContaining(["SIG_VALID", "PERMIT2_SPENDER_OK", "AMOUNT_MATCHES", "PAYTO_MATCHES", "PERMIT2_APPROVAL_NEEDED"]));
+    expect(codes(d)).toEqual(
+      expect.arrayContaining(["SIG_VALID", "PERMIT2_SPENDER_OK", "AMOUNT_MATCHES", "PAYTO_MATCHES", "PERMIT2_APPROVAL_NEEDED"]),
+    );
     expect(d.flags.filter((f) => f.level === "danger")).toEqual([]);
   });
 

@@ -3,6 +3,7 @@
 import { sha256, sha384, sha512 } from "@noble/hashes/sha2.js";
 import { p256 } from "@noble/curves/nist.js";
 import { b64url, fromB64url, isRecord, utf8, parseJsonLoose } from "./encoding.js";
+import { asText } from "./format.js";
 
 type Obj = Record<string, unknown>;
 
@@ -53,7 +54,7 @@ export function parseJwt(raw: string): Jwt | undefined {
 const enc = new TextEncoder();
 
 export function sdHash(s: string, alg: unknown = "sha-256"): string {
-  const a = String(alg ?? "sha-256").toLowerCase();
+  const a = asText(alg, "sha-256").toLowerCase();
   const fn = a === "sha-384" ? sha384 : a === "sha-512" ? sha512 : sha256;
   return b64url(fn(enc.encode(s)));
 }
@@ -63,7 +64,7 @@ function resolve(v: unknown, byDigest: Map<string, Disclosure>, counter: { undis
     const out: unknown[] = [];
     for (const el of v) {
       if (isRecord(el) && Object.keys(el).length === 1 && typeof el["..."] === "string") {
-        const d = byDigest.get(el["..."] as string);
+        const d = byDigest.get(el["..."]);
         if (d && d.name === undefined) {
           d.used = true;
           out.push(resolve(d.value, byDigest, counter));
@@ -80,7 +81,7 @@ function resolve(v: unknown, byDigest: Map<string, Disclosure>, counter: { undis
     }
     if (Array.isArray(v._sd)) {
       for (const dg of v._sd) {
-        const d = byDigest.get(String(dg));
+        const d = byDigest.get(asText(dg));
         if (d && d.name !== undefined) {
           d.used = true;
           out[d.name] = resolve(d.value, byDigest, counter);
@@ -107,8 +108,8 @@ export function parseSdToken(raw: string): SdToken | undefined {
     disclosures.push({
       raw: d,
       digest: sdHash(d, alg),
-      salt: String(arr[0]),
-      name: arr.length === 3 ? String(arr[1]) : undefined,
+      salt: asText(arr[0]),
+      name: arr.length === 3 ? asText(arr[1]) : undefined,
       value: arr.length === 3 ? arr[2] : arr[1],
       used: false,
     });
@@ -135,8 +136,8 @@ export function parseChain(input: string): SdToken[] | undefined {
 /** Verify an ES256 JWS over its signing input with a P-256 JWK. */
 export function verifyEs256(jwt: Jwt, jwk: unknown): boolean {
   if (!isRecord(jwk) || jwk.kty !== "EC" || jwk.crv !== "P-256") return false;
-  const x = fromB64url(String(jwk.x ?? ""));
-  const y = fromB64url(String(jwk.y ?? ""));
+  const x = fromB64url(asText(jwk.x, ""));
+  const y = fromB64url(asText(jwk.y, ""));
   if (!x || !y || x.length !== 32 || y.length !== 32 || jwt.signature.length !== 64) return false;
   const pub = new Uint8Array(65);
   pub[0] = 4;

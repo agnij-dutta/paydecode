@@ -20,7 +20,8 @@ const NOW = 1790000000;
 const payer = Keypair.fromSeed(new Uint8Array(32).fill(7));
 const facilitator = Keypair.fromSeed(new Uint8Array(32).fill(9));
 const merchant = Keypair.fromSeed(new Uint8Array(32).fill(3)).publicKey;
-const ata = (owner: PublicKey) => PublicKey.findProgramAddressSync([owner.toBuffer(), TOKEN.toBuffer(), USDC_DEVNET.toBuffer()], ATA_PROGRAM)[0];
+const ata = (owner: PublicKey) =>
+  PublicKey.findProgramAddressSync([owner.toBuffer(), TOKEN.toBuffer(), USDC_DEVNET.toBuffer()], ATA_PROGRAM)[0];
 
 function transferChecked(amount: bigint, decimals = 6, dest = ata(merchant)) {
   const data = Buffer.alloc(10);
@@ -65,7 +66,8 @@ const accepted = {
   maxTimeoutSeconds: 60,
   extra: { feePayer: facilitator.publicKey.toBase58() },
 };
-const payload = (tx: string) => b64({ x402Version: 2, resource: { url: "https://api.example.com/sol" }, accepted, payload: { transaction: tx } });
+const payload = (tx: string) =>
+  b64({ x402Version: 2, resource: { url: "https://api.example.com/sol" }, accepted, payload: { transaction: tx } });
 
 describe("SVM exact", () => {
   it("parser agrees with @solana/web3.js on a generated v0 transaction", () => {
@@ -89,7 +91,9 @@ describe("SVM exact", () => {
     expect(d.summary).toBe(
       `Solana transaction that pays 0.01 USDC on Solana Devnet from ${payer.publicKey.toBase58().slice(0, 6)}…${payer.publicKey.toBase58().slice(-4)} to ${merchant.toBase58().slice(0, 6)}…${merchant.toBase58().slice(-4)} (its USDC account), with ${facilitator.publicKey.toBase58().slice(0, 6)}…${facilitator.publicKey.toBase58().slice(-4)} as fee payer. Payer signature valid; fee payer signs at settlement.`,
     );
-    expect(codes(d)).toEqual(expect.arrayContaining(["SIG_VALID", "SVM_FEE_PAYER_UNSIGNED", "PAYTO_MATCHES", "AMOUNT_MATCHES", "SVM_MEMO"]));
+    expect(codes(d)).toEqual(
+      expect.arrayContaining(["SIG_VALID", "SVM_FEE_PAYER_UNSIGNED", "PAYTO_MATCHES", "AMOUNT_MATCHES", "SVM_MEMO"]),
+    );
     expect(d.flags.filter((f) => f.level === "danger" || f.level === "warn")).toEqual([]);
     const ixs = d.sections.find((s) => s.title === "Instructions")!.fields.map((f) => f.value);
     expect(ixs[0]).toBe("Set compute unit limit to 20,000");
@@ -104,7 +108,11 @@ describe("SVM exact", () => {
   });
 
   it("flags unknown programs and wrong destination", () => {
-    const rogue = new TransactionInstruction({ programId: Keypair.fromSeed(new Uint8Array(32).fill(5)).publicKey, keys: [], data: Buffer.from([1, 2, 3]) });
+    const rogue = new TransactionInstruction({
+      programId: Keypair.fromSeed(new Uint8Array(32).fill(5)).publicKey,
+      keys: [],
+      data: Buffer.from([1, 2, 3]),
+    });
     const d = dec(payload(buildTx({ extra: [rogue], dest: ata(Keypair.fromSeed(new Uint8Array(32).fill(4)).publicKey) })), NOW);
     expect(codes(d)).toEqual(expect.arrayContaining(["SVM_UNKNOWN_PROGRAM", "PAYTO_MISMATCH"]));
   });
@@ -123,7 +131,11 @@ describe("SVM exact", () => {
 
   it("decodes a bare base64 legacy transaction", () => {
     const t = new Transaction({ feePayer: facilitator.publicKey, recentBlockhash: "GHtXQBsoZHVnNFa9YevAzFr17DJjgHXk3ycTKD5xD3Zi" });
-    t.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 20000 }), ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }), transferChecked(10000n));
+    t.add(
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 20000 }),
+      ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
+      transferChecked(10000n),
+    );
     t.partialSign(payer);
     const raw = t.serialize({ requireAllSignatures: false }).toString("base64");
     const d = dec(raw, NOW);
@@ -136,7 +148,11 @@ describe("SVM exact", () => {
     const msg = new TransactionMessage({
       payerKey: payer.publicKey,
       recentBlockhash: "GHtXQBsoZHVnNFa9YevAzFr17DJjgHXk3ycTKD5xD3Zi",
-      instructions: [ComputeBudgetProgram.setComputeUnitLimit({ units: 20000 }), ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }), transferChecked(10000n)],
+      instructions: [
+        ComputeBudgetProgram.setComputeUnitLimit({ units: 20000 }),
+        ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }),
+        transferChecked(10000n),
+      ],
     }).compileToV0Message();
     const tx = new VersionedTransaction(msg);
     const d = dec(Buffer.from(tx.serialize()).toString("base64"), NOW);

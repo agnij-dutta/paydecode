@@ -1,5 +1,6 @@
 // Network + asset knowledge. Sources: docs/SPEC-NOTES.md (USDC rows verified
 // on-chain 2026-10-04) and x402-foundation/x402 mechanisms/evm/src/defaultAssets.ts.
+import { asText } from "./format.js";
 
 export interface NetworkInfo {
   family: "evm" | "svm" | "other";
@@ -71,7 +72,7 @@ const SOLANA = [
 ];
 
 export function networkInfo(network: unknown): NetworkInfo {
-  const n = typeof network === "string" ? network.trim() : String(network ?? "");
+  const n = typeof network === "string" ? network.trim() : asText(network, "");
   const lower = n.toLowerCase();
   const sol = SOLANA.find((s) => s.caip2 === n || s.v1 === lower);
   if (sol) return { family: "svm", name: sol.name, caip2: sol.caip2, testnet: sol.testnet, known: true };

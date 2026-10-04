@@ -16,9 +16,40 @@ const BEFORE_EXPIRY = Date.parse("2025-01-15T12:00:00Z") / 1000;
 
 // Verbatim from agentic-commerce-protocol examples/unreleased/examples.delegate_payment.json
 const ACP_REQUEST = {
-  payment_method: { type: "card", card_number_type: "fpan", virtual: false, number: "4242424242424242", exp_month: "11", exp_year: "2026", name: "Jane Doe", cvc: "223", checks_performed: ["avs", "cvv"], iin: "424242", display_card_funding_type: "credit", display_wallet_type: "apple_pay", display_brand: "visa", display_last4: "4242", metadata: { issuing_bank: "temp" } },
-  allowance: { reason: "one_time", max_amount: 2000, currency: "usd", checkout_session_id: "csn_01HV3P3XYZ9ABC", merchant_id: "acme_store", expires_at: "2025-10-09T07:20:50.52Z" },
-  billing_address: { name: "Ada Lovelace", line_one: "1234 Chat Road", line_two: "", city: "San Francisco", state: "CA", country: "US", postal_code: "94131" },
+  payment_method: {
+    type: "card",
+    card_number_type: "fpan",
+    virtual: false,
+    number: "4242424242424242",
+    exp_month: "11",
+    exp_year: "2026",
+    name: "Jane Doe",
+    cvc: "223",
+    checks_performed: ["avs", "cvv"],
+    iin: "424242",
+    display_card_funding_type: "credit",
+    display_wallet_type: "apple_pay",
+    display_brand: "visa",
+    display_last4: "4242",
+    metadata: { issuing_bank: "temp" },
+  },
+  allowance: {
+    reason: "one_time",
+    max_amount: 2000,
+    currency: "usd",
+    checkout_session_id: "csn_01HV3P3XYZ9ABC",
+    merchant_id: "acme_store",
+    expires_at: "2025-10-09T07:20:50.52Z",
+  },
+  billing_address: {
+    name: "Ada Lovelace",
+    line_one: "1234 Chat Road",
+    line_two: "",
+    city: "San Francisco",
+    state: "CA",
+    country: "US",
+    postal_code: "94131",
+  },
   risk_signals: [{ type: "card_testing", score: 10, action: "manual_review" }],
   metadata: { campaign: "q4", source: "chatgpt_checkout" },
 };
@@ -49,13 +80,22 @@ describe("MPP", () => {
   });
 
   it("receipt", () => {
-    const r = Buffer.from(JSON.stringify({ status: "success", method: "tempo", timestamp: "2025-01-15T12:04:00Z", reference: "0xabc123def4567890" })).toString("base64url");
+    const r = Buffer.from(
+      JSON.stringify({ status: "success", method: "tempo", timestamp: "2025-01-15T12:04:00Z", reference: "0xabc123def4567890" }),
+    ).toString("base64url");
     const d = dec(`Payment-Receipt: ${r}`, BEFORE_EXPIRY);
     expect(d.summary).toBe("Receipt: payment succeeded via 'tempo' at 15 Jan 2025, 12:04:00 UTC, reference 0xabc123de…567890.");
   });
 
   it("tempo challenge with token decimals in methodDetails", () => {
-    const req = Buffer.from(JSON.stringify({ amount: "1000000", currency: "0x3600000000000000000000000000000000000000", recipient: "0x742d35Cc6634C0532925a3b844Bc9e7595f8fE00", methodDetails: { chainId: 5042, decimals: 6 } })).toString("base64url");
+    const req = Buffer.from(
+      JSON.stringify({
+        amount: "1000000",
+        currency: "0x3600000000000000000000000000000000000000",
+        recipient: "0x742d35Cc6634C0532925a3b844Bc9e7595f8fE00",
+        methodDetails: { chainId: 5042, decimals: 6 },
+      }),
+    ).toString("base64url");
     const d = dec(`WWW-Authenticate: Payment id="abc", realm="api.x", method="usdc", intent="charge", request="${req}"`, BEFORE_EXPIRY);
     expect(d.summary).toContain("a one-time charge of 1.00 USDC to 0x742d…fE00 via 'usdc'");
   });
@@ -65,7 +105,9 @@ describe("ACP", () => {
   it("delegate payment request: allowance in English, raw PAN flagged", () => {
     const d = dec(JSON.stringify(ACP_REQUEST), Date.parse("2025-10-09T07:00:00Z") / 1000);
     expect(d.kind).toBe("acp.delegate-payment");
-    expect(d.summary).toBe("Asks the PSP to vault visa ending 4242 so the agent can charge up to $20.00 USD at merchant 'acme_store' for checkout csn_01HV3P3XYZ9ABC, once.");
+    expect(d.summary).toBe(
+      "Asks the PSP to vault visa ending 4242 so the agent can charge up to $20.00 USD at merchant 'acme_store' for checkout csn_01HV3P3XYZ9ABC, once.",
+    );
     expect(flagOf(d, "ACP_RAW_PAN")?.level).toBe("danger");
     expect(codes(d)).toContain("ACP_RISK_SIGNAL");
     expect(JSON.stringify(d.sections)).not.toContain("4242424242424242");
@@ -104,7 +146,12 @@ describe("unrecognized input", () => {
     expect(j.summary).toBe("This is valid JSON, but no known payment schema matched it. The parsed JSON is below.");
     expect(j.raw).toEqual({ foo: 1, bar: [1, 2] });
     const b = decode(Buffer.from(JSON.stringify({ x402Version: 2, hello: true })).toString("base64"));
-    expect(b.summary).toBe("This is base64-encoded JSON, but no known schema matched it. Here's the decoded JSON.".replace("known schema", "known payment schema"));
+    expect(b.summary).toBe(
+      "This is base64-encoded JSON, but no known schema matched it. Here's the decoded JSON.".replace(
+        "known schema",
+        "known payment schema",
+      ),
+    );
     expect(codes(b)).toContain("X402_PARTIAL");
     expect(decode("0x" + "ab".repeat(65)).summary).toContain("bare 65-byte ECDSA signature");
     expect(decode("0x857b06519E91e3A54538791bDbb0E22373e36b66").summary).toBe("That's an EVM address, not a payment artifact.");
@@ -129,8 +176,12 @@ describe("unrecognized input", () => {
 describe("robustness", () => {
   it("mutated fixtures never crash the decoder", () => {
     const FX = JSON.parse(readFileSync(new URL("./fixtures/fixtures.json", import.meta.url), "utf8"));
-    const inputs: string[] = [FX.ap2_v02_open_plus_closed_payment_mandate_chain, readFileSync(new URL("./fixtures/ap2-x402-bundle.json", import.meta.url), "utf8")];
-    for (const g of [FX.x402_v1_http, FX.x402_v2_http]) for (const v of Object.values(g) as string[][]) inputs.push(...v.map((x) => Buffer.from(x, "base64").toString()));
+    const inputs: string[] = [
+      FX.ap2_v02_open_plus_closed_payment_mandate_chain,
+      readFileSync(new URL("./fixtures/ap2-x402-bundle.json", import.meta.url), "utf8"),
+    ];
+    for (const g of [FX.x402_v1_http, FX.x402_v2_http])
+      for (const v of Object.values(g as Record<string, string[]>)) inputs.push(...v.map((x) => Buffer.from(x, "base64").toString()));
     let seed = 42;
     const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
     for (const s of inputs) {

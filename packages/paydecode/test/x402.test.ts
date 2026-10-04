@@ -84,7 +84,9 @@ describe("x402 fixtures", () => {
       expect(ok.summary).toBe("Settlement succeeded on Base Sepolia: transaction 0x12345678…abcdef, paid by 0x857b…6b66.");
       expect(codes(ok)).toEqual(expect.arrayContaining(["SETTLED", "PLACEHOLDER_TX"]));
       const bad = dec(group[key][1], X402_NOW);
-      expect(bad.summary).toContain("Settlement failed on Base Sepolia: insufficient_funds (the payer's wallet doesn't hold enough of the asset)");
+      expect(bad.summary).toContain(
+        "Settlement failed on Base Sepolia: insufficient_funds (the payer's wallet doesn't hold enough of the asset)",
+      );
       expect(flagOf(bad, "SETTLE_FAILED")?.level).toBe("danger");
     });
   }
@@ -102,15 +104,21 @@ describe("EIP-3009 domain diagnosis", () => {
     const d = dec(b64(p), X402_NOW);
     const f = flagOf(d, "EIP712_DOMAIN_MISMATCH");
     expect(f?.level).toBe("danger");
-    expect(f?.message).toContain("Signed with name 'USD Coin' (copied from the requirements' extra) but Base Sepolia USDC's domain name is 'USDC'");
-    expect(d.summary).toContain("Signature will be rejected on-chain: signed with name 'USD Coin' but Base Sepolia USDC's domain name is 'USDC'.");
+    expect(f?.message).toContain(
+      "Signed with name 'USD Coin' (copied from the requirements' extra) but Base Sepolia USDC's domain name is 'USDC'",
+    );
+    expect(d.summary).toContain(
+      "Signature will be rejected on-chain: signed with name 'USD Coin' but Base Sepolia USDC's domain name is 'USDC'.",
+    );
     expect(codes(d)).not.toContain("SIG_VALID");
   });
 
   it("negative: requirements are right but the client signed with 'USD Coin' anyway -> found by domain search", async () => {
     const p = await signedPayload({ signName: "USD Coin", extraName: "USDC" });
     const d = dec(b64(p), X402_NOW);
-    expect(flagOf(d, "EIP712_DOMAIN_MISMATCH")?.message).toMatch(/^Signed with name 'USD Coin' but Base Sepolia USDC's domain name is 'USDC'/);
+    expect(flagOf(d, "EIP712_DOMAIN_MISMATCH")?.message).toMatch(
+      /^Signed with name 'USD Coin' but Base Sepolia USDC's domain name is 'USDC'/,
+    );
   });
 
   it("the fixture's real signature with extra.name edited to 'USD Coin' still verifies on-chain, but extra is flagged", () => {
@@ -125,7 +133,9 @@ describe("EIP-3009 domain diagnosis", () => {
     const r = unb64(V2_REQ);
     r.accepts[0].extra.name = "USD Coin";
     const d = dec(b64(r), X402_NOW);
-    expect(flagOf(d, "REQUIREMENTS_DOMAIN_WRONG")?.message).toContain("extra.name is 'USD Coin' but Base Sepolia USDC's on-chain EIP-712 domain name is 'USDC'");
+    expect(flagOf(d, "REQUIREMENTS_DOMAIN_WRONG")?.message).toContain(
+      "extra.name is 'USD Coin' but Base Sepolia USDC's on-chain EIP-712 domain name is 'USDC'",
+    );
   });
 });
 
@@ -208,13 +218,41 @@ describe("x402 containers and transports", () => {
 
   it("facilitator v1 /verify body cross-checks payTo from paymentRequirements", () => {
     const p = unb64(V1_PAY);
-    const req = { scheme: "exact", network: "base-sepolia", maxAmountRequired: "10000", resource: "https://x/y", description: "", mimeType: "", payTo: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8", maxTimeoutSeconds: 60, asset: USDC_BASE_SEPOLIA, extra: { name: "USDC", version: "2" } };
+    const req = {
+      scheme: "exact",
+      network: "base-sepolia",
+      maxAmountRequired: "10000",
+      resource: "https://x/y",
+      description: "",
+      mimeType: "",
+      payTo: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+      maxTimeoutSeconds: 60,
+      asset: USDC_BASE_SEPOLIA,
+      extra: { name: "USDC", version: "2" },
+    };
     const d = dec(JSON.stringify({ x402Version: 1, paymentPayload: p, paymentRequirements: req }), X402_NOW);
     expect(codes(d)).toEqual(expect.arrayContaining(["SIG_VALID", "PAYTO_MISMATCH", "AMOUNT_MATCHES"]));
   });
 
   it("v1 402 body", () => {
-    const body = { x402Version: 1, error: "X-PAYMENT header is required", accepts: [{ scheme: "exact", network: "base", maxAmountRequired: "2500000", resource: "https://api.example.com/report", description: "Weekly report", mimeType: "application/json", payTo: "0x209693Bc6afc0C5328bA36FaF03C514EF312287C", maxTimeoutSeconds: 300, asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", extra: { name: "USD Coin", version: "2" } }] };
+    const body = {
+      x402Version: 1,
+      error: "X-PAYMENT header is required",
+      accepts: [
+        {
+          scheme: "exact",
+          network: "base",
+          maxAmountRequired: "2500000",
+          resource: "https://api.example.com/report",
+          description: "Weekly report",
+          mimeType: "application/json",
+          payTo: "0x209693Bc6afc0C5328bA36FaF03C514EF312287C",
+          maxTimeoutSeconds: 300,
+          asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+          extra: { name: "USD Coin", version: "2" },
+        },
+      ],
+    };
     const d = dec(JSON.stringify(body), X402_NOW);
     expect(d.summary).toBe(
       'Server asks for 2.50 USDC on Base to 0x2096…287C (exact, EIP-3009) to access https://api.example.com/report (Weekly report). Server message: "X-PAYMENT header is required".',
@@ -235,7 +273,12 @@ describe("x402 containers and transports", () => {
   });
 
   it("MCP _meta x402/payment wrapper", () => {
-    const rpc = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "get_weather", arguments: {}, _meta: { "x402/payment": unb64(V2_SIG) } } };
+    const rpc = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name: "get_weather", arguments: {}, _meta: { "x402/payment": unb64(V2_SIG) } },
+    };
     const d = dec(JSON.stringify(rpc), X402_NOW);
     expect(d.kind).toBe("x402.payment-payload");
     expect(d.title).toContain('inside MCP _meta["x402/payment"]');
@@ -243,16 +286,39 @@ describe("x402 containers and transports", () => {
   });
 
   it("A2A metadata with requirements and a payload together", () => {
-    const msg = { metadata: { "x402.payment.status": "payment-submitted", "x402.payment.required": unb64(V2_REQ), "x402.payment.payload": unb64(V2_SIG) } };
+    const msg = {
+      metadata: {
+        "x402.payment.status": "payment-submitted",
+        "x402.payment.required": unb64(V2_REQ),
+        "x402.payment.payload": unb64(V2_SIG),
+      },
+    };
     const d = dec(JSON.stringify(msg), X402_NOW);
     expect(d.kind).toBe("container");
     if (d.kind === "container") expect(d.children?.map((c) => c.kind)).toEqual(["x402.payment-required", "x402.payment-payload"]);
   });
 
   it("/supported and verify responses", () => {
-    const sup = { kinds: [{ x402Version: 2, scheme: "exact", network: "eip155:8453" }, { x402Version: 2, scheme: "exact", network: "eip155:84532" }, { x402Version: 2, scheme: "exact", network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", extra: { feePayer: "FacPay111" } }], extensions: [], signers: { "eip155:*": ["0x1111111111111111111111111111111111111111"] } };
-    expect(dec(JSON.stringify(sup), X402_NOW).summary).toBe("Facilitator supports 3 scheme/network pairs: exact (v2) on Base, Base Sepolia, and Solana.");
-    const vr = dec(JSON.stringify({ isValid: false, invalidReason: "invalid_exact_evm_payload_signature", payer: "0x857b06519E91e3A54538791bDbb0E22373e36b66" }), X402_NOW);
+    const sup = {
+      kinds: [
+        { x402Version: 2, scheme: "exact", network: "eip155:8453" },
+        { x402Version: 2, scheme: "exact", network: "eip155:84532" },
+        { x402Version: 2, scheme: "exact", network: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", extra: { feePayer: "FacPay111" } },
+      ],
+      extensions: [],
+      signers: { "eip155:*": ["0x1111111111111111111111111111111111111111"] },
+    };
+    expect(dec(JSON.stringify(sup), X402_NOW).summary).toBe(
+      "Facilitator supports 3 scheme/network pairs: exact (v2) on Base, Base Sepolia, and Solana.",
+    );
+    const vr = dec(
+      JSON.stringify({
+        isValid: false,
+        invalidReason: "invalid_exact_evm_payload_signature",
+        payer: "0x857b06519E91e3A54538791bDbb0E22373e36b66",
+      }),
+      X402_NOW,
+    );
     expect(vr.summary).toContain("often a wrong domain name/version or chain");
   });
 

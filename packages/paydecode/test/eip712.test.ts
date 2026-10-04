@@ -83,11 +83,17 @@ describe("eip712 vs viem", () => {
       to: [{ name: "Bob", wallet: "0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB" }],
     } as const;
     const d = { name: "Mail", version: "1", chainId: 1 };
-    expect(hex(typedDataHash(d, types as never, "Mail", m as never))).toBe(hashTypedData({ domain: d, types, primaryType: "Mail", message: m }));
+    expect(hex(typedDataHash(d, types as never, "Mail", m as never))).toBe(
+      hashTypedData({ domain: d, types, primaryType: "Mail", message: m }),
+    );
   });
 
   it("checksums addresses like viem", () => {
-    for (const a of ["0x857b06519e91e3a54538791bdbb0e22373e36b66", "0x036cbd53842c5426634e7929541ec2318f3dcf7e", "0xfb6916095ca1df60bb79ce92ce3ea74c37c5d359"]) {
+    for (const a of [
+      "0x857b06519e91e3a54538791bdbb0e22373e36b66",
+      "0x036cbd53842c5426634e7929541ec2318f3dcf7e",
+      "0xfb6916095ca1df60bb79ce92ce3ea74c37c5d359",
+    ]) {
       expect(checksumAddress(a)).toBe(getAddress(a));
     }
   });
@@ -97,7 +103,9 @@ describe("eip712 vs viem", () => {
     const sig = await acct.signTypedData({ domain, types: TWA_TYPES, primaryType: "TransferWithAuthorization", message });
     const digest = typedDataDigest(domain, "TransferWithAuthorization", [...TWA_TYPES.TransferWithAuthorization], { ...message });
     expect(recoverAddress(digest, sig)).toBe(acct.address);
-    expect(await recoverTypedDataAddress({ domain, types: TWA_TYPES, primaryType: "TransferWithAuthorization", message, signature: sig })).toBe(acct.address);
+    expect(
+      await recoverTypedDataAddress({ domain, types: TWA_TYPES, primaryType: "TransferWithAuthorization", message, signature: sig }),
+    ).toBe(acct.address);
     const v = parseInt(sig.slice(-2), 16);
     const low = sig.slice(0, -2) + (v - 27).toString(16).padStart(2, "0");
     expect(recoverAddress(digest, low)).toBe(acct.address);
@@ -108,7 +116,9 @@ describe("eip712 vs viem", () => {
     const sig =
       "0x2d6a7588d6acca505cbf0d9a4a227e0c52c6c34008c8e8986a1283259764173608a2ce6496642e377d6da8dbbf5836e9bd15092f9ecab05ded3d6293af148b571c";
     const good = typedDataDigest(domain, "TransferWithAuthorization", [...TWA_TYPES.TransferWithAuthorization], { ...message });
-    const bad = typedDataDigest({ ...domain, name: "USD Coin" }, "TransferWithAuthorization", [...TWA_TYPES.TransferWithAuthorization], { ...message });
+    const bad = typedDataDigest({ ...domain, name: "USD Coin" }, "TransferWithAuthorization", [...TWA_TYPES.TransferWithAuthorization], {
+      ...message,
+    });
     expect(recoverAddress(good, sig)).toBe(message.from);
     expect(recoverAddress(bad, sig)).not.toBe(message.from);
   });
@@ -127,7 +137,9 @@ describe("eip712 vs viem", () => {
     const sig = await acct.signTypedData({ domain, types: TWA_TYPES, primaryType: "TransferWithAuthorization", message });
     const rec = makeRecoverer(sig)!;
     for (const name of ["USDC", "USD Coin", "x"]) {
-      const dg = typedDataDigest({ ...domain, name }, "TransferWithAuthorization", [...TWA_TYPES.TransferWithAuthorization], { ...message });
+      const dg = typedDataDigest({ ...domain, name }, "TransferWithAuthorization", [...TWA_TYPES.TransferWithAuthorization], {
+        ...message,
+      });
       expect(rec(dg)).toBe(recoverAddress(dg, sig));
     }
     expect(makeRecoverer("0x1234")).toBeNull();

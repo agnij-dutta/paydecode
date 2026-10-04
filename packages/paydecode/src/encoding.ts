@@ -46,7 +46,7 @@ export function utf8(bytes: Uint8Array): string {
   return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
 }
 
-export function tryJson(s: string): unknown | undefined {
+export function tryJson(s: string): unknown {
   const t = s.trim();
   if (!(t.startsWith("{") || t.startsWith("["))) return undefined;
   try {
@@ -57,7 +57,7 @@ export function tryJson(s: string): unknown | undefined {
 }
 
 /** base64 -> JSON, if the bytes are UTF-8 JSON. */
-export function base64Json(s: string): unknown | undefined {
+export function base64Json(s: string): unknown {
   const bytes = decodeBase64(s);
   if (!bytes) return undefined;
   return tryJson(utf8(bytes));
@@ -93,7 +93,7 @@ export function fromB64url(s: string): Uint8Array | null {
 }
 
 /** Parse a JSON string, returning undefined instead of throwing. Accepts any JSON value. */
-export function parseJsonLoose(s: string): unknown | undefined {
+export function parseJsonLoose(s: string): unknown {
   try {
     return JSON.parse(s);
   } catch {

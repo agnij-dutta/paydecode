@@ -4,6 +4,7 @@
 import { keccak_256 } from "@noble/hashes/sha3.js";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { hexToBytes, bytesToHex } from "./encoding.js";
+import { asText } from "./format.js";
 
 export interface TypedField {
   name: string;
@@ -46,7 +47,7 @@ function toBigInt(value: unknown): bigint {
   if (typeof value === "bigint") return value;
   if (typeof value === "number") return BigInt(value);
   if (typeof value === "boolean") return value ? 1n : 0n;
-  return BigInt(String(value));
+  return BigInt(asText(value));
 }
 
 /** Collect the struct types `primary` depends on (including itself). */
@@ -76,13 +77,13 @@ function encodeField(type: string, value: unknown, types: TypeMap): Uint8Array {
     return keccak_256(concatBytes(items.map((v) => encodeField(inner, v, types))));
   }
   if (types[type]) return hashStructTyped(type, types, (value ?? {}) as Record<string, unknown>);
-  if (type === "string") return keccak_256(enc.encode(String(value)));
-  if (type === "bytes") return keccak_256(hexToBytes(String(value)));
+  if (type === "string") return keccak_256(enc.encode(asText(value)));
+  if (type === "bytes") return keccak_256(hexToBytes(asText(value)));
   if (type === "address") return word(toBigInt(value));
   if (type === "bool") return word(value === true || value === "true" ? 1n : 0n);
   if (/^u?int\d*$/.test(type)) return word(toBigInt(value));
   if (/^bytes\d+$/.test(type)) {
-    const b = hexToBytes(String(value));
+    const b = hexToBytes(asText(value));
     const out = new Uint8Array(32);
     out.set(b.slice(0, 32));
     return out;
@@ -116,24 +117,14 @@ export function domainSeparator(domain: Domain): Uint8Array {
 }
 
 /** Digest for a full typed-data object with (possibly nested) struct types. */
-export function typedDataHash(
-  domain: Domain,
-  types: TypeMap,
-  primaryType: string,
-  message: Record<string, unknown>,
-): Uint8Array {
+export function typedDataHash(domain: Domain, types: TypeMap, primaryType: string, message: Record<string, unknown>): Uint8Array {
   const ds = domainSeparator(domain);
   const ms = hashStructTyped(primaryType, types, message);
   return keccak_256(concatBytes([new Uint8Array([0x19, 0x01]), ds, ms]));
 }
 
 /** Flat-struct digest (original API). */
-export function typedDataDigest(
-  domain: Domain,
-  primaryType: string,
-  fields: TypedField[],
-  message: Record<string, unknown>,
-): Uint8Array {
+export function typedDataDigest(domain: Domain, primaryType: string, fields: TypedField[], message: Record<string, unknown>): Uint8Array {
   return typedDataHash(domain, { [primaryType]: fields }, primaryType, message);
 }
 
@@ -219,7 +210,7 @@ export function makeRecoverer(signature: string): ((digest: Uint8Array) => strin
   }
 }
 
-export const isEvmAddress = (s: unknown): s is string => typeof s === "string" && /^0x[0-9a-fA-F]{40}$/.test(s);
+export const isEvmAddress = (s: unknown): s is `0x${string}` => typeof s === "string" && /^0x[0-9a-fA-F]{40}$/.test(s);
 
 export const sameAddress = (a: unknown, b: unknown): boolean =>
   typeof a === "string" && typeof b === "string" && a.toLowerCase() === b.toLowerCase();
