@@ -1,0 +1,25 @@
+# paydecode
+
+> paydecode is "jwt.io for agent payments": a browser tool that decodes agent-payment artifacts into plain English with risk flags. All decoding happens client-side; pasted input is never uploaded. Built by Agnij Dutta (@0xholmesdev).
+
+Use it to inspect what an AI agent's payment authorization actually allows before it is sent or settled.
+
+## What it decodes
+
+- x402 v1 and v2 HTTP headers: `PAYMENT-REQUIRED` (402 challenge), `PAYMENT-SIGNATURE` / `X-PAYMENT` (signed payment), `PAYMENT-RESPONSE` / `X-PAYMENT-RESPONSE` (settlement receipt). Base64 JSON, header lines accepted.
+- EIP-3009 `TransferWithAuthorization` and Permit2 witness transfers, including EIP-712 domain checks against known USDC deployments (name, version, chain id, contract).
+- AP2 (Agent Payments Protocol) mandates: v0.2 SD-JWT mandates and `~~`-joined delegation chains (open and closed checkout/payment mandates), plus v0.1 Intent/Cart/Payment mandate JSON.
+- Solana x402 payment transactions (partially signed versioned transactions with SPL TransferChecked).
+
+## Risk flags it raises (examples)
+
+- Authorization expired or not yet valid
+- EIP-712 domain name mismatch (for example "USD Coin" vs "USDC" on Base Sepolia), which makes the signature recover to the wrong address
+- Payment amount above the mandate cap, payee outside the allowed list
+- Settlement failures and their error reasons
+
+## Links
+
+- App: https://paydecode.vercel.app/
+- Source and npm library: https://github.com/agnij-dutta/paydecode
+- Enforcement (on-chain spend caps for agents): https://capline-protocol.vercel.app
