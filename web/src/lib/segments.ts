@@ -13,7 +13,6 @@ export interface SegmentInfo {
   mode: "chain" | "jwt" | "header" | "plain";
   /** Legend entries keyed by palette slot. */
   legend: { tone: number; label: string }[];
-  hopCount: number;
 }
 
 const HEADER_RE = /^(\s*)([A-Za-z][A-Za-z0-9-]*)(\s*:\s*)/;
@@ -64,7 +63,6 @@ export function segmentInput(input: string): SegmentInfo {
     return {
       segments,
       mode: "chain",
-      hopCount: hops.length,
       legend: hops.slice(0, 4).map((_, i) => ({ tone: i, label: `Hop ${i + 1}` })),
     };
   }
@@ -77,14 +75,13 @@ export function segmentInput(input: string): SegmentInfo {
       { tone: 2, label: "Signature" },
     ];
     if (body.includes("~")) legend.push({ tone: 3, label: "Disclosures" });
-    return { segments, mode: "jwt", hopCount: 0, legend };
+    return { segments, mode: "jwt", legend };
   }
 
   segments.push({ text: rest, tone: header ? 1 : "plain" });
   return {
     segments,
     mode: header ? "header" : "plain",
-    hopCount: 0,
     legend: header ? [{ tone: 1, label: `${header[2]} value` }] : [],
   };
 }

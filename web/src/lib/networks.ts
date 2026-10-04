@@ -50,7 +50,7 @@ const SOL_TEST: NetworkInfo = {
 };
 
 /** Resolve a CAIP-2 id or x402 v1 network name to explorer info. */
-export function resolveNetwork(id: string | undefined | null): NetworkInfo | null {
+function resolveNetwork(id: string | undefined | null): NetworkInfo | null {
   if (!id) return null;
   const s = id.trim();
   const caip = s.match(/eip155:(\d+)/);
@@ -87,7 +87,7 @@ export function findNetwork(fieldValues: string[], raw: unknown): NetworkInfo | 
 }
 
 export const isEvmAddress = (s: string) => /^0x[0-9a-fA-F]{40}$/.test(s);
-export const isEvmTxHash = (s: string) => /^0x[0-9a-fA-F]{64}$/.test(s);
+const isEvmTxHash = (s: string) => /^0x[0-9a-fA-F]{64}$/.test(s);
 export const isBase58 = (s: string, min = 32, max = 44) => new RegExp(`^[1-9A-HJ-NP-Za-km-z]{${min},${max}}$`).test(s);
 
 export function explorerLink(net: NetworkInfo | null, value: string, type: "address" | "tx"): string | null {

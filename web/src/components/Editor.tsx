@@ -15,7 +15,7 @@ export const Editor = forwardRef<HTMLTextAreaElement, Props>(function Editor({ v
     <div className="editor">
       <pre className="editor-mirror" ref={mirror} aria-hidden="true">
         {segments.map((s, i) => (
-          <span key={i} className={typeof s.tone === "number" ? `seg seg-${s.tone}` : `seg seg-${s.tone}`}>
+          <span key={i} className={`seg seg-${s.tone}`}>
             {s.text}
           </span>
         ))}
