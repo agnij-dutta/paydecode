@@ -206,6 +206,16 @@ export function verifyEip3009Signature(
     flags.push(flag("danger", "AUTH_FROM_INVALID", `authorization.from (${from || "missing"}) is not an EVM address.`));
     return { flags, phrase: "Signature could not be checked.", fields };
   }
+  const bad: string[] = [];
+  if (!isEvmAddress(auth.to)) bad.push(`to (${String(auth.to ?? "missing")}) is not an address`);
+  for (const k of ["value", "validAfter", "validBefore"]) {
+    if (!/^\d+$/.test(String(auth[k] ?? ""))) bad.push(`${k} (${String(auth[k] ?? "missing")}) is not a non-negative integer`);
+  }
+  if (!/^(0x)?[0-9a-fA-F]{1,64}$/.test(String(auth.nonce ?? ""))) bad.push(`nonce (${short(String(auth.nonce ?? "missing"), 10, 4)}) is not bytes32 hex`);
+  if (bad.length) {
+    flags.push(flag("danger", "AUTH_FIELD_INVALID", `The authorization is malformed: ${bad.join("; ")}. No token contract will accept it, and the signature can't be checked.`));
+    return { flags, phrase: "Signature not checked (malformed authorization).", fields };
+  }
   const sigBytes = sig.length - 2;
   if (!/^0x[0-9a-fA-F]+$/.test(sig) || (sigBytes !== 130 && sigBytes !== 128)) {
     flags.push(
@@ -225,7 +235,13 @@ export function verifyEip3009Signature(
   const onchain: Domain | undefined = token
     ? { name: token.name, version: token.version, chainId: token.chainId, verifyingContract: token.address }
     : undefined;
-  const tryD = (d: Domain) => recoverAddress(typedDataHash(d, TRANSFER_WITH_AUTHORIZATION, "TransferWithAuthorization", message), sig);
+  const tryD = (d: Domain) => {
+    try {
+      return recoverAddress(typedDataHash(d, TRANSFER_WITH_AUTHORIZATION, "TransferWithAuthorization", message), sig);
+    } catch {
+      return null;
+    }
+  };
   const claimedRec = claimed ? tryD(claimed) : null;
   const claimedOk = !!claimedRec && sameAddress(claimedRec, from);
   const domainsDiffer = !!(claimed && onchain && (claimed.name !== onchain.name || claimed.version !== onchain.version));

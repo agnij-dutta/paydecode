@@ -125,3 +125,20 @@ describe("unrecognized input", () => {
     expect((performance.now() - t) / 5).toBeLessThan(500);
   });
 });
+
+describe("robustness", () => {
+  it("mutated fixtures never crash the decoder", () => {
+    const FX = JSON.parse(readFileSync(new URL("./fixtures/fixtures.json", import.meta.url), "utf8"));
+    const inputs: string[] = [FX.ap2_v02_open_plus_closed_payment_mandate_chain, readFileSync(new URL("./fixtures/ap2-x402-bundle.json", import.meta.url), "utf8")];
+    for (const g of [FX.x402_v1_http, FX.x402_v2_http]) for (const v of Object.values(g) as string[][]) inputs.push(...v.map((x) => Buffer.from(x, "base64").toString()));
+    let seed = 42;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    for (const s of inputs) {
+      for (let i = 0; i < 60; i++) {
+        const at = Math.floor(rnd() * s.length);
+        const m = i % 2 ? s.slice(0, at) : s.slice(0, at) + String.fromCharCode(33 + Math.floor(rnd() * 90)) + s.slice(at + 1);
+        expect(codes(decode(m, { now: 1777343000 }))).not.toContain("DECODER_ERROR");
+      }
+    }
+  });
+});
