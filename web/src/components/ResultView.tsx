@@ -101,6 +101,8 @@ export function ResultView({ result, now, depth = 0, tone = null, inheritedNet =
   const net = findNetwork(values, result.raw) ?? inheritedNet;
   const children = "children" in result ? (result.children ?? []) : [];
   const nested = depth > 0;
+  // Top-level section titles sit under the pane's h2; nested cards already use h3 for their own title.
+  const SectionHeading = nested ? "h4" : "h3";
 
   return (
     <article className={`result ${nested ? "result-nested" : ""} ${tone !== null ? `tone-${tone}` : ""}`}>
@@ -118,7 +120,7 @@ export function ResultView({ result, now, depth = 0, tone = null, inheritedNet =
         const st = chainMode ? toneForHop(s.title) : toneForSection(s.title);
         return (
           <section key={`${s.title}-${i}`} className={`fields ${st !== null ? `tone-${st}` : ""}`}>
-            <h4>{s.title}</h4>
+            <SectionHeading>{s.title}</SectionHeading>
             <dl>
               {s.fields.map((f, j) => (
                 <FieldRow key={`${f.label}-${j}`} field={f} net={net} now={now} tone={chainMode ? toneForHop(f.label) : null} />

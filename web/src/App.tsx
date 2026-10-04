@@ -170,6 +170,7 @@ export default function App() {
   return (
     <div className="shell">
       <header className="topbar">
+        <h1 className="sr-only">paydecode: decode agent payment artifacts</h1>
         <a className="brand" href="/" aria-label="paydecode home">
           <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
             <rect x="2.5" y="4.5" width="19" height="15" rx="2" fill="none" stroke="currentColor" strokeWidth="1.6" />
@@ -186,7 +187,13 @@ export default function App() {
             </svg>
             Decoded locally · nothing is uploaded
           </span>
-          <button type="button" className="ghost" onClick={cycle} aria-label={`Theme: ${theme}. Click to change.`}>
+          <button
+            type="button"
+            className="ghost"
+            onClick={cycle}
+            aria-label={`Color theme: ${theme === "system" ? "Auto" : theme === "dark" ? "Dark" : "Light"}`}
+            title="Cycle color theme: Auto, Dark, Light"
+          >
             {theme === "system" ? "Auto" : theme === "dark" ? "Dark" : "Light"}
           </button>
         </div>
@@ -211,7 +218,10 @@ export default function App() {
       </nav>
 
       <main className="panes">
-        <section className="pane pane-input" aria-label="Input">
+        <section className="pane pane-input" aria-labelledby="input-heading">
+          <h2 id="input-heading" className="sr-only">
+            Input
+          </h2>
           <div className="pane-head">
             <div className="detect" aria-live="polite">
               {result === null ? (
@@ -257,7 +267,10 @@ export default function App() {
           </div>
         </section>
 
-        <section className="pane pane-output" aria-label="Decoded" aria-live="polite">
+        <section className="pane pane-output" aria-labelledby="output-heading">
+          <h2 id="output-heading" className="sr-only">
+            Decoded result
+          </h2>
           {result === null ? (
             <div className="empty">
               <p className="empty-title">Nothing decoded yet.</p>
