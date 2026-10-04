@@ -38,4 +38,17 @@ describe.skipIf(!existsSync(CLI))("CLI (built dist)", () => {
   it("exits 1 on unrecognized input", () => {
     expect(run(["definitely not a payment"]).status).toBe(1);
   });
+
+  it("rejects a malformed --now and unknown options with exit 2", () => {
+    for (const args of [["--now=abc", "x"], ["--now", "1.5", "x"], ["--now"], ["--jsno", "x"]]) {
+      const r = run(args);
+      expect(r.status).toBe(2);
+      expect(r.stderr).toMatch(/^paydecode: /);
+    }
+  });
+
+  it("--help documents every option the parser accepts", () => {
+    const help = run(["--help"]).stdout;
+    for (const opt of ["--json", "--now", "--color", "--no-color", "--strict", "--help"]) expect(help).toContain(opt);
+  });
 });

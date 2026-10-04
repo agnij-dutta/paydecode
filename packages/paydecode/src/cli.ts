@@ -10,11 +10,12 @@ const HELP = `paydecode: jwt.io for agent payments
 Usage
   paydecode <blob>            decode a header value, JSON, SD-JWT, base64 tx...
   paydecode <file>            decode the contents of a file
-  echo <blob> | paydecode     read from stdin
+  echo <blob> | paydecode     read from stdin (or pass - as the blob)
 
 Options
   --json         print the decoded result as JSON
   --now <unix>   evaluate expiry against this unix time instead of now
+  --color        force ANSI colors even when stdout is not a terminal
   --no-color     disable ANSI colors (also honors NO_COLOR)
   --strict       exit with code 3 if any DANGER flag is raised
   -h, --help     show this help
@@ -33,6 +34,11 @@ interface Args {
   strict: boolean;
 }
 
+function parseNow(v: string | undefined): number {
+  if (v === undefined || !/^\d+$/.test(v.trim())) throw new Error("--now needs a unix timestamp in whole seconds, e.g. --now 1740672100");
+  return Number(v);
+}
+
 function parseArgs(argv: string[]): Args {
   const a: Args = { json: false, color: !process.env.NO_COLOR && !!process.stdout.isTTY, help: false, strict: false };
   const rest: string[] = [];
@@ -43,11 +49,10 @@ function parseArgs(argv: string[]): Args {
     else if (x === "--color") a.color = true;
     else if (x === "--strict") a.strict = true;
     else if (x === "-h" || x === "--help") a.help = true;
-    else if (x === "--now") {
-      const v = Number(argv[++i]);
-      if (!Number.isFinite(v)) throw new Error("--now needs a unix timestamp in seconds");
-      a.now = v;
-    } else if (x.startsWith("--now=")) a.now = Number(x.slice(6));
+    else if (x === "--now") a.now = parseNow(argv[++i]);
+    else if (x.startsWith("--now=")) a.now = parseNow(x.slice(6));
+    // Unknown flags are errors, unless a blob already started (a pasted `curl ... -H '...'` line).
+    else if (!rest.length && /^--?[A-Za-z]/.test(x)) throw new Error(`unknown option ${x} (see --help)`);
     else rest.push(x);
   }
   if (rest.length) a.input = rest.join(" ");
