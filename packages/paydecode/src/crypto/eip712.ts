@@ -3,8 +3,8 @@
 // PermitWitnessTransferFrom). Isomorphic: no node: imports.
 import { keccak_256 } from "@noble/hashes/sha3.js";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
-import { hexToBytes, bytesToHex } from "./encoding.js";
-import { asText } from "./format.js";
+import { bytesToHex, hexToBytes } from "../core/encoding.js";
+import { asText } from "../core/format.js";
 
 export interface TypedField {
   name: string;
@@ -21,9 +21,9 @@ export interface Domain {
   salt?: string;
 }
 
-const enc = new TextEncoder();
+export const enc = new TextEncoder();
 
-function word(n: bigint): Uint8Array {
+export function word(n: bigint): Uint8Array {
   const out = new Uint8Array(32);
   let v = BigInt.asUintN(256, n);
   for (let i = 31; i >= 0; i--) {
@@ -43,7 +43,7 @@ export function concatBytes(parts: Uint8Array[]): Uint8Array {
   return out;
 }
 
-function toBigInt(value: unknown): bigint {
+export function toBigInt(value: unknown): bigint {
   if (typeof value === "bigint") return value;
   if (typeof value === "number") return BigInt(value);
   if (typeof value === "boolean") return value ? 1n : 0n;
@@ -51,7 +51,7 @@ function toBigInt(value: unknown): bigint {
 }
 
 /** Collect the struct types `primary` depends on (including itself). */
-function dependencies(primary: string, types: TypeMap, found: Set<string> = new Set()): Set<string> {
+export function dependencies(primary: string, types: TypeMap, found: Set<string> = new Set()): Set<string> {
   const base = primary.replace(/\[\d*\]$/, "");
   if (found.has(base) || !types[base]) return found;
   found.add(base);
@@ -69,7 +69,7 @@ export function typeHash(primary: string, types: TypeMap): Uint8Array {
   return keccak_256(enc.encode(encodeType(primary, types)));
 }
 
-function encodeField(type: string, value: unknown, types: TypeMap): Uint8Array {
+export function encodeField(type: string, value: unknown, types: TypeMap): Uint8Array {
   const arr = type.match(/^(.*)\[(\d*)\]$/);
   if (arr) {
     const inner = arr[1];
@@ -128,6 +128,7 @@ export function typedDataDigest(domain: Domain, primaryType: string, fields: Typ
   return typedDataHash(domain, { [primaryType]: fields }, primaryType, message);
 }
 
+/** EIP-55 mixed-case checksum encoding of an EVM address (https://eips.ethereum.org/EIPS/eip-55). */
 export function checksumAddress(addr: string): string {
   const a = addr.toLowerCase().replace(/^0x/, "");
   const h = keccak_256(enc.encode(a));

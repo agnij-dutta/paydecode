@@ -1,6 +1,7 @@
+// Input unwrapping (pasted headers, curl -H, quotes) and lenient base64/base64url/JSON helpers.
 import { base64, base64url, base64nopad, base64urlnopad, hex } from "@scure/base";
 
-const HEADER_PREFIX =
+export const HEADER_PREFIX =
   /^\s*(?:-H\s*|--header\s*)?(['"]?)\s*(x-payment-response|x-payment|payment-required|payment-signature|payment-response|payment-receipt|payment-authorization|www-authenticate|authorization|signature-input|signature|extension-responses)\s*:\s*/i;
 
 export interface Unwrapped {
@@ -26,7 +27,7 @@ export function unwrapHeader(input: string): Unwrapped {
   return { header, text: text.trim() };
 }
 
-const B64_RE = /^[A-Za-z0-9+/_-]+={0,2}$/;
+export const B64_RE = /^[A-Za-z0-9+/_-]+={0,2}$/;
 
 /** Decode base64 or base64url, with or without padding. Returns null if it isn't. */
 export function decodeBase64(s: string): Uint8Array | null {

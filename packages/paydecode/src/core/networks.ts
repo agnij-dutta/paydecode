@@ -14,14 +14,14 @@ export interface NetworkInfo {
   known: boolean;
 }
 
-interface ChainRow {
+export interface ChainRow {
   id: number;
   name: string;
   v1?: string;
   testnet?: boolean;
 }
 
-const EVM_CHAINS: ChainRow[] = [
+export const EVM_CHAINS: ChainRow[] = [
   { id: 1, name: "Ethereum", v1: "ethereum" },
   { id: 11155111, name: "Sepolia", v1: "sepolia", testnet: true },
   { id: 8453, name: "Base", v1: "base" },
@@ -65,12 +65,16 @@ const EVM_CHAINS: ChainRow[] = [
   { id: 5042002, name: "Arc Testnet", testnet: true },
 ];
 
-const SOLANA = [
+export const SOLANA = [
   { caip2: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp", v1: "solana", name: "Solana", testnet: false },
   { caip2: "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1", v1: "solana-devnet", name: "Solana Devnet", testnet: true },
   { caip2: "solana:4uhcVJyU9pJkvQyS88uRDiswHXSCkY3z", v1: "solana-testnet", name: "Solana Testnet", testnet: true },
 ];
 
+/**
+ * Resolve an x402 network id, either a v1 name ("base-sepolia") or CAIP-2 ("eip155:84532",
+ * "solana:EtWT..."), to a family, human name and chain id. Unknown ids return `known: false`.
+ */
 export function networkInfo(network: unknown): NetworkInfo {
   const n = typeof network === "string" ? network.trim() : asText(network, "");
   const lower = n.toLowerCase();
@@ -108,7 +112,7 @@ export interface EvmToken {
   source: "onchain" | "x402-default";
 }
 
-const t = (
+export const t = (
   chainId: number,
   address: string,
   name: string,
@@ -119,6 +123,10 @@ const t = (
   transfer: EvmToken["transfer"] = "eip3009",
 ): EvmToken => ({ chainId, address, name, version, decimals, symbol, source, transfer });
 
+/**
+ * Known EVM payment tokens with their EIP-712 domain. `source: "onchain"` rows were checked against
+ * the deployed contracts on 2026-10-04; `x402-default` rows come from x402's defaultAssets.ts.
+ */
 export const EVM_TOKENS: EvmToken[] = [
   t(1, "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "USD Coin", "2", 6, "USDC", "onchain"),
   t(11155111, "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238", "USDC", "2", 6, "USDC", "onchain"),
@@ -177,6 +185,7 @@ export interface SplToken {
   network: string;
 }
 
+/** Known Solana payment mints (USDC mainnet and devnet, classic Token program). */
 export const SPL_TOKENS: SplToken[] = [
   { mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", symbol: "USDC", decimals: 6, network: "Solana" },
   { mint: "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU", symbol: "USDC", decimals: 6, network: "Solana Devnet" },

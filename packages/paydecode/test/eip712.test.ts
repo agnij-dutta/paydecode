@@ -1,7 +1,15 @@
 import { describe, it, expect } from "vitest";
 import { hashTypedData, getAddress, recoverTypedDataAddress, keccak256, toHex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { typedDataDigest, typedDataHash, recoverAddress, checksumAddress, encodeType, keccakUtf8, makeRecoverer } from "../src/eip712.js";
+import {
+  typedDataDigest,
+  typedDataHash,
+  recoverAddress,
+  checksumAddress,
+  encodeType,
+  keccakUtf8,
+  makeRecoverer,
+} from "../src/crypto/eip712.js";
 import { ANVIL_0, TWA_TYPES, USDC_BASE_SEPOLIA } from "./helpers.js";
 
 const hex = (b: Uint8Array) => "0x" + Buffer.from(b).toString("hex");

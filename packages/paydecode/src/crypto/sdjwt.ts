@@ -2,8 +2,8 @@
 // delegation-chain (`~~`) splitting, as used by AP2 v0.2 mandates.
 import { sha256, sha384, sha512 } from "@noble/hashes/sha2.js";
 import { p256 } from "@noble/curves/nist.js";
-import { b64url, fromB64url, isRecord, utf8, parseJsonLoose } from "./encoding.js";
-import { asText } from "./format.js";
+import { b64url, fromB64url, isRecord, parseJsonLoose, utf8 } from "../core/encoding.js";
+import { asText } from "../core/format.js";
 
 type Obj = Record<string, unknown>;
 
@@ -51,15 +51,20 @@ export function parseJwt(raw: string): Jwt | undefined {
   return { raw: raw.trim(), header, payload, signature: s, signingInput: `${parts[0]}.${parts[1]}` };
 }
 
-const enc = new TextEncoder();
+export const enc = new TextEncoder();
 
+/**
+ * base64url(hash(ascii(s))) with the SD-JWT `_sd_alg` (sha-256 default). Used both for disclosure
+ * digests (RFC 9901 section 4.2.3) and for KB-JWT `sd_hash`, which covers the previous token
+ * including its trailing "~".
+ */
 export function sdHash(s: string, alg: unknown = "sha-256"): string {
   const a = asText(alg, "sha-256").toLowerCase();
   const fn = a === "sha-384" ? sha384 : a === "sha-512" ? sha512 : sha256;
   return b64url(fn(enc.encode(s)));
 }
 
-function resolve(v: unknown, byDigest: Map<string, Disclosure>, counter: { undisclosed: number }): unknown {
+export function resolve(v: unknown, byDigest: Map<string, Disclosure>, counter: { undisclosed: number }): unknown {
   if (Array.isArray(v)) {
     const out: unknown[] = [];
     for (const el of v) {

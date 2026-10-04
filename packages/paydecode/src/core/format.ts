@@ -1,5 +1,5 @@
 // Formatting helpers shared by every decoder. Plain English, no em dashes.
-import type { Field, Flag, FlagLevel, Section } from "./types.js";
+import type { Field, Flag, FlagLevel, Section } from "../types.js";
 
 /**
  * Render an untrusted JSON value as text. Strings pass through; objects become JSON
@@ -23,7 +23,7 @@ export function short(s: unknown, head = 6, tail = 4): string {
   return `${v.slice(0, head)}…${v.slice(-tail)}`;
 }
 
-function groupThousands(int: string): string {
+export function groupThousands(int: string): string {
   return int.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
@@ -44,8 +44,8 @@ export function formatUnits(value: unknown, decimals: number, minFraction = 2): 
   return (neg ? "-" : "") + groupThousands(int) + (frac ? "." + frac : "");
 }
 
-const ZERO_DECIMAL = new Set(["JPY", "KRW", "VND", "CLP", "ISK", "UGX", "XAF", "XOF", "PYG", "RWF"]);
-const SYMBOL: Record<string, string> = { USD: "$", EUR: "€", GBP: "£", JPY: "¥", INR: "₹", CAD: "CA$", AUD: "A$" };
+export const ZERO_DECIMAL = new Set(["JPY", "KRW", "VND", "CLP", "ISK", "UGX", "XAF", "XOF", "PYG", "RWF"]);
+export const SYMBOL: Record<string, string> = { USD: "$", EUR: "€", GBP: "£", JPY: "¥", INR: "₹", CAD: "CA$", AUD: "A$" };
 
 /** Fiat minor units -> "$200.00 USD". */
 export function formatMinor(amount: unknown, currency: unknown): string {
@@ -64,7 +64,7 @@ export function formatMajor(amount: unknown, currency: unknown): string {
   return `${SYMBOL[cur] ?? ""}${num}${cur ? " " + cur : ""}`;
 }
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export function toUnix(v: unknown): number | undefined {
   if (v === undefined || v === null || v === "") return undefined;
@@ -93,7 +93,7 @@ export function formatTime(unix: number): string {
   return `${formatDay(unix)}, ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())} UTC`;
 }
 
-const UNITS: [number, string][] = [
+export const UNITS: [number, string][] = [
   [365 * 86400, "year"],
   [30 * 86400, "month"],
   [86400, "day"],
@@ -140,7 +140,7 @@ export const timeField = (label: string, unix: number | undefined, now: number, 
 
 export const flag = (level: FlagLevel, code: string, message: string): Flag => ({ level, code, message });
 
-const ORDER: Record<FlagLevel, number> = { danger: 0, warn: 1, info: 2, ok: 3 };
+export const ORDER: Record<FlagLevel, number> = { danger: 0, warn: 1, info: 2, ok: 3 };
 
 export function sortFlags(flags: Flag[]): Flag[] {
   const seen = new Set<string>();

@@ -1,3 +1,4 @@
+// Public result types. The web app and other consumers code against these, so changes must stay additive.
 export type FlagLevel = "danger" | "warn" | "info" | "ok";
 
 /** A finding about the artifact, ranked by how much it should worry you. */
