@@ -3,22 +3,24 @@
 **jwt.io for agent payments.** Paste any agent-payment artifact and get a plain-English explanation of what it authorizes, plus specific, actionable risk flags.
 
 ```
-$ paydecode "$(cat bundle.json)"
+$ paydecode --now 1777343000 test/fixtures/ap2-x402-bundle.json
 
-AP2 x x402 payment credential
+AP2 x x402 payment credential  ap2.x402-credential
 
   AP2 x402 credential that authorizes 0xf39F…2266 to pay 199.00 USDC on Base Sepolia to
-  0x7099…79C8, valid until 28 Apr 2026. Signature will be rejected on-chain: signed with name
-  'USD Coin' but Base Sepolia USDC's domain name is 'USDC'. Its nonce binds it to the AP2
-  mandate chain.
+  0x7099…79C8, valid until 28 Apr 2026. Signature will be rejected on-chain: signed with name 'USD
+  Coin' but Base Sepolia USDC's domain name is 'USDC'. Its nonce binds it to the AP2 mandate
+  chain.
 
-  [DANGER] Signed with name 'USD Coin' but Base Sepolia USDC's domain name is 'USDC'. USDC's
+  [DANGER]  Signed with name 'USD Coin' but Base Sepolia USDC's domain name is 'USDC'. USDC's
            contract hashes the real domain, so transferWithAuthorization will revert with
-           "invalid signature". Re-sign with name 'USDC'.
-  [OK]     EIP-3009 nonce equals keccak256(payment_mandate_chain), so this payment can only be
-           the one the mandate chain authorized, and only once.
+           "invalid signature". Re-sign with name 'USDC'. EIP712_DOMAIN_MISMATCH
   ...
+  [OK]      EIP-3009 nonce equals keccak256(payment_mandate_chain), so this payment can only be
+           the one the mandate chain authorized, and only once. AP2_NONCE_BOUND
 ```
+
+(Real output, trimmed where marked. The input is the bundle AP2's `x402_credentials_provider_mcp` sample produces, reproduced with the sample's default keys.)
 
 Runs entirely offline, in Node or the browser. Runtime dependencies are only `@noble/hashes`, `@noble/curves` and `@scure/base`.
 
@@ -52,15 +54,17 @@ paydecode <blob>            decode a header value, JSON, SD-JWT, base64 tx...
 paydecode <file>            decode the contents of a file
 echo <blob> | paydecode     read from stdin
 curl -si https://api.example.com/paid | paydecode
-
-Options
-  --json         print the decoded result as JSON
-  --now <unix>   evaluate expiry against this unix time instead of now
-  --no-color     disable ANSI colors (also honors NO_COLOR)
-  --strict       exit with code 3 if any DANGER flag is raised
 ```
 
-Exit codes: `0` decoded, `1` unrecognized input, `2` usage error, `3` danger flag with `--strict`.
+| Flag | Meaning |
+|---|---|
+| `--json` | Print the full `Decoded` result as JSON |
+| `--now <unix>` | Judge expiry against this unix time (seconds) instead of the clock |
+| `--no-color` / `--color` | Force ANSI colors off or on (default: on for a TTY; `NO_COLOR` is honored) |
+| `--strict` | Exit with code 3 if any DANGER flag is raised, anywhere in the result tree |
+| `-h`, `--help` | Show help |
+
+Exit codes: `0` decoded, `1` unrecognized input, `2` usage error, `3` danger flag under `--strict`.
 
 ## Library
 
@@ -81,7 +85,22 @@ detect("X-PAYMENT: eyJ..."); // { kind: "x402.payment-payload", header: "x-payme
 
 Nested artifacts (the mandate chain inside an AP2 bundle, the x402 requirements inside an AP2 v0.1 cart) are in `children`, each with its own flags. When several artifacts are pasted together (an HTTP response with a header and a body, an A2A message with requirements and a payload), the result has `kind: "container"`, one child per artifact, and the container repeats the children's danger and warn flags prefixed with `[n]`.
 
-Lower-level helpers are exported too: `parseTransaction`, `associatedTokenAddress`, `parseChain`, `parseSdToken`, `verifyEs256`, `sdHash`, `typedDataHash`, `recoverAddress`, `checksumAddress`, `networkInfo`, `EVM_TOKENS`, `SPL_TOKENS`.
+### Exports
+
+| Export | Description |
+|---|---|
+| `decode(input: string, opts?: { now?: number }): Decoded \| Unrecognized` | Decode any supported artifact. `now` is unix seconds (default: the clock). Never throws |
+| `detect(input: string): Detection` | `{ kind, header?, encoding? }`: what the input is, without the explanation |
+| `parseTransaction(bytes: Uint8Array): ParsedTx` | Parse a legacy or v0 Solana transaction (throws on malformed bytes) |
+| `associatedTokenAddress(owner, mint, tokenProgram?)` | Derive an SPL associated token account (base58) |
+| `parseChain(chain)`, `parseSdToken(token)` | Parse an SD-JWT delegation chain or a single SD-JWT, resolving disclosures |
+| `verifyEs256(jwt, jwk): boolean` | Verify an ES256 JWS with a P-256 JWK |
+| `sdHash(s, alg?): string` | SD-JWT digest (base64url of sha-256/384/512) |
+| `typedDataHash(domain, types, primaryType, message)` | EIP-712 digest with nested structs and arrays |
+| `recoverAddress(digest, signature): string \| null` | secp256k1 signer recovery, checksummed |
+| `checksumAddress(addr): string` | EIP-55 checksum |
+| `networkInfo(id): NetworkInfo` | v1 network names and CAIP-2 ids to human names and chain ids |
+| `EVM_TOKENS`, `SPL_TOKENS` | Known payment tokens, with EIP-712 domains and their provenance |
 
 ### Public types
 
@@ -95,16 +114,21 @@ The bugs are real and quiet. AP2's own x402 sample signs Base Sepolia USDC with 
 
 The goal is the same as jwt.io: paste the thing, understand the thing, in one sentence, before you trust it.
 
+## Limitations
+
+paydecode works offline: it never sees balances, allowances, used nonces, smart-wallet (EIP-1271/6492) signatures or settlement state. Signatures whose keys aren't in the artifact (the AP2 root issuer, merchant checkout JWTs, MPP proofs, Visa TAP) are reported as "not verified (no key)", never as valid. Stateful AP2 constraints (budgets, recurrence) are listed as not checkable. The full security model is in the [repository README](https://github.com/agnij-dutta/paydecode#security-model-and-limitations).
+
 ## Development
 
 ```
-npm run build -w paydecode   # tsup for JS, tsc for .d.ts (tsup's dts plugin doesn't support TypeScript 7)
-npm test -w paydecode        # vitest
+npm run build -w paydecode    # tsup for JS, then tsc for .d.ts (tsup's dts step fails on this toolchain)
+npm test -w paydecode         # vitest
+npm run lint -w paydecode     # ESLint (typescript-eslint, type-aware) + Prettier config
 npx tsx scripts/gen-fixtures.mts   # regenerate test/fixtures/ap2-x402-bundle.json
 ```
 
-Fixtures: `test/fixtures/fixtures.json` (verbatim x402 and AP2 artifacts), `ap2-checkout-chain.txt` (verbatim from the AP2 docs), `ap2-x402-bundle.json` (the AP2 sample's credential bundle reproduced with its own default keys). Solana transactions, Permit2 payloads and extra AP2 chains are generated inside the tests with `@solana/web3.js`, `viem` and `@noble/curves`.
+Fixtures: `test/fixtures/fixtures.json` (verbatim x402 and AP2 artifacts), `ap2-checkout-chain.txt` (verbatim from the AP2 docs), `ap2-x402-bundle.json` (the AP2 sample's credential bundle reproduced with its own default keys). Solana transactions, Permit2 payloads and extra AP2 chains are generated inside the tests with `@solana/web3.js`, `viem` and `@noble/curves`. See [CONTRIBUTING.md](../../CONTRIBUTING.md) to add a format.
 
 ## License
 
-MIT
+MIT, Copyright (c) 2026 Agnij Dutta ([@0xholmesdev](https://x.com/0xholmesdev)). Source: https://github.com/agnij-dutta/paydecode
