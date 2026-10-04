@@ -1,5 +1,5 @@
 // Regenerates the synthetic fixtures in test/fixtures/ (deterministic).
-// Run: npx tsx scripts/gen-fixtures.mts
+// Run: npm run fixtures -w paydecode (Node 22.6+, which can strip TypeScript types itself)
 import { writeFileSync, readFileSync } from "node:fs";
 import { privateKeyToAccount } from "viem/accounts";
 import { keccak256, toHex } from "viem";

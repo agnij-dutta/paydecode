@@ -10,7 +10,7 @@ The browser front end for [paydecode](../packages/paydecode): jwt.io for agent p
 
 ## Quickstart
 
-From the repository root (Node 20 or newer; checked on Node 22.14):
+From the repository root (Node 20.19 or newer; checked on Node 22.14):
 
 ```sh
 npm install
@@ -58,13 +58,13 @@ web/
       examples.ts         example artifacts, taken from the library's test fixtures
       brokenExample.ts    signs the "USDC domain mismatch" demo in the page
       networks.ts         chain ids and network names to block explorer links
-      format.ts           time parsing, relative times, safe JSON
-    types/paydecode.d.ts  type surface of the library, for the web typecheck
+      format.ts           relative-time glosses (from Field.unixSeconds), safe JSON
+    types/paydecode.d.ts  re-exports the library entry point, for the web typecheck
 ```
 
 **Decoding.** `decode()` from the `paydecode` package does all the protocol work: detecting the format, base64 and JWT parsing, EIP-712 hashing and signature recovery, AP2 constraint checks and Solana transaction parsing. The web app only presents its `Decoded` result: `title`, `summary`, `flags` (danger, warn, info, ok), `sections` of typed fields, `children` for delegation hops, and `raw`.
 
-**Library from source.** `vite.config.ts` aliases `paydecode` to `packages/paydecode/src/index.ts`, and `tsconfig.app.json` maps it to `src/types/paydecode.d.ts`. So the web app always runs the library's current code, and the web's stricter compiler flags are not applied to library sources. When the library's public API changes, update that `.d.ts`.
+**Library from source.** `vite.config.ts` aliases `paydecode` to `packages/paydecode/src/index.ts`, and `tsconfig.app.json` maps it to `src/types/paydecode.d.ts`, which re-exports that same entry point. So the web app always runs and type-checks against the library's current code, with nothing copied that could drift. The library sources are therefore also checked under the web's compiler flags (`erasableSyntaxOnly`, `noUnusedLocals`), so keep library code within them.
 
 **Lazy decoder.** The decoder and its crypto (`@noble/curves`, `@noble/hashes`) load as a separate chunk after first paint. The page renders and accepts input immediately, then decodes once the chunk arrives.
 

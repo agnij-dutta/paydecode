@@ -20,6 +20,7 @@ AP2 x x402 payment credential  ap2.x402-credential
            back to a default merchant wallet.) AP2_PAYEE_UNBOUND
   [INFO]    The artifact doesn't name the token; the signature's EIP-712 domain identifies it as
            Base Sepolia USDC (0x036C…CF7e). ASSET_INFERRED
+  [INFO]    validAfter is 0, so the authorization is usable immediately (no start time). AUTH_NO_START
   [OK]      EIP-3009 nonce equals keccak256(payment_mandate_chain), so this payment can only be
            the one the mandate chain authorized, and only once. AP2_NONCE_BOUND
   [OK]      payment_nonce matches the nonce the agent signed into the closed mandate. AP2_KB_NONCE_OK
@@ -37,7 +38,7 @@ The bugs are real and quiet. AP2's x402 sample signs Base Sepolia USDC with the 
 
 ## Quickstart
 
-Requires Node 20 or newer.
+Requires Node 20.19 or newer.
 
 ```sh
 git clone https://github.com/agnij-dutta/paydecode.git
@@ -64,7 +65,7 @@ npm run dev
 ```
 paydecode <blob>            decode a header value, JSON, SD-JWT, base64 tx...
 paydecode <file>            decode the contents of a file
-echo <blob> | paydecode     read from stdin
+echo <blob> | paydecode     read from stdin (or pass - as the blob)
 curl -si https://api.example.com/paid | paydecode
 ```
 
@@ -76,7 +77,9 @@ curl -si https://api.example.com/paid | paydecode
 | `--strict` | Exit with code 3 if any DANGER flag is raised, for CI gates |
 | `-h`, `--help` | Show help |
 
-Exit codes: `0` decoded, `1` unrecognized input, `2` usage error, `3` danger flag under `--strict`.
+Exit codes: `0` decoded (or `--help`), `1` unrecognized or empty input, `2` usage error (unknown option, `--now` that isn't whole unix seconds) or an unexpected crash, `3` danger flag under `--strict`.
+
+A single argument that names an existing file (optionally prefixed with `@`) is read as a file; several arguments are joined with spaces into one blob.
 
 | Env var | Meaning |
 |---|---|
@@ -97,6 +100,7 @@ d.flags;   // [{ level: "ok", code: "SIG_VALID", message: "..." }, ...]
 | Export | Description |
 |---|---|
 | `decode(input, { now? })` | Decode any supported artifact. Returns `Decoded \| Unrecognized` and never throws |
+| `MAX_INPUT_LENGTH` | `1_000_000`: longer inputs return `Unrecognized` with `INPUT_TOO_LARGE` instead of being parsed |
 | `detect(input)` | `{ kind, header?, encoding? }` without the explanation |
 | `parseTransaction(bytes)` | Parse a legacy or v0 Solana transaction |
 | `associatedTokenAddress(owner, mint, tokenProgram?)` | Derive an SPL associated token account |
@@ -105,6 +109,7 @@ d.flags;   // [{ level: "ok", code: "SIG_VALID", message: "..." }, ...]
 | `typedDataHash(domain, types, primaryType, message)`, `recoverAddress(digest, sig)`, `checksumAddress(addr)` | EIP-712 hashing (nested structs) and signer recovery |
 | `networkInfo(id)`, `EVM_TOKENS`, `SPL_TOKENS` | Network names and known payment tokens with their EIP-712 domains |
 | Types: `Decoded`, `Unrecognized`, `Section`, `Field`, `Flag`, `FlagLevel`, `DecodeOptions`, `Detection` | The result contract |
+| Types: `Domain`, `TypeMap`, `TypedField`, `ParsedTx`, `ParsedInstruction`, `SdToken`, `Jwt`, `Disclosure`, `NetworkInfo`, `EvmToken`, `SplToken` | What the lower-level functions take and return |
 
 The full list of supported formats, what each `kind` means and how deeply each is verified is in [packages/paydecode/README.md](packages/paydecode/README.md).
 
@@ -151,6 +156,7 @@ paydecode explains and checks. It does not authorize, settle or simulate anythin
 - **Stateful constraints are skipped.** AP2 budgets, recurrence counts and checkout references need history or other mandates, so they are listed as "not checkable offline".
 - **Solana address lookup tables** can't be resolved offline. Accounts loaded from them are shown as table entries.
 - **Pasting is a disclosure.** The library and the web app decode locally and send nothing anywhere, but an x402 authorization is a bearer instrument until it expires. Don't paste live, unexpired payment blobs into tools you don't control. ACP requests can contain raw card numbers; paydecode flags them and masks them in the explanation, though `raw` (and `--json`) still contains exactly what you pasted.
+- **Bounded input.** `decode()` refuses inputs over 1,000,000 characters (`INPUT_TOO_LARGE`) and JSON nested deeper than 64 levels (`JSON_TOO_DEEP`), so hostile pastes can't exhaust the stack or the tab. Real artifacts are a few kilobytes.
 - **Heuristics are heuristics.** Thresholds such as "window longer than an hour" and the 8-minute TAP window are conventions taken from reference implementations, not spec rules.
 
 See [SECURITY.md](SECURITY.md) for how to report a vulnerability.

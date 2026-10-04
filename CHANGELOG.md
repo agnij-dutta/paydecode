@@ -19,3 +19,6 @@ All notable changes to this project are documented here. The format follows [Kee
 - `paydecode` CLI with `--json`, `--now`, `--strict` and color output.
 - Optional UI hints on results: `Section.hop` / `Field.hop` for AP2 chains and `Field.unixSeconds` on time fields; `Unrecognized.children?: never`; exported `Domain`, `TypeMap`, `TypedField` types.
 - Web app (`web/`) for paste-and-read decoding in the browser.
+- Input limits: `MAX_INPUT_LENGTH` (1,000,000 characters, `INPUT_TOO_LARGE`) and a 64-level JSON nesting limit (`JSON_TOO_DEEP`).
+- SD-JWT disclosure processing per RFC 9901 section 7.1 (`SdToken.problems`, `SD_JWT_MALFORMED`), `SIG_HIGH_S` for EIP-3009, `SVM_MALFORMED_IX` for truncated Solana instructions, `AP2_AMOUNT_UNCHECKED` when the token's decimals are unknown.
+- Exported types for the lower-level functions: `ParsedTx`, `ParsedInstruction`, `SdToken`, `Jwt`, `Disclosure`, `NetworkInfo`, `EvmToken`, `SplToken`.

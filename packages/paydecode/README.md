@@ -16,6 +16,7 @@ AP2 x x402 payment credential  ap2.x402-credential
            contract hashes the real domain, so transferWithAuthorization will revert with
            "invalid signature". Re-sign with name 'USDC'. EIP712_DOMAIN_MISMATCH
   ...
+  [INFO]    validAfter is 0, so the authorization is usable immediately (no start time). AUTH_NO_START
   [OK]      EIP-3009 nonce equals keccak256(payment_mandate_chain), so this payment can only be
            the one the mandate chain authorized, and only once. AP2_NONCE_BOUND
 ```
@@ -30,13 +31,13 @@ Runs entirely offline, in Node or the browser. Runtime dependencies are only `@n
 | ------------------------------------------------------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **x402 v1 / v2 PaymentRequired** (`PAYMENT-REQUIRED` header, v1 402 body)                   | `x402.payment-required`                          | Prices with real decimals, network names, flags wrong EIP-712 domain in `extra`, unknown assets, tokens without EIP-3009, missing Solana fee payer                                                                                                                                                                                                                                                                                             |
 | **x402 PaymentPayload** (`X-PAYMENT`, `PAYMENT-SIGNATURE`)                                  | `x402.payment-payload`                           | Full, see the scheme rows below. Cross-checks against `accepted` (v2) or `paymentRequirements` (facilitator body)                                                                                                                                                                                                                                                                                                                              |
-| exact / EVM / **EIP-3009**                                                                  | inside the payload                               | Recovers the signer from the EIP-712 digest and compares to `from`. If it fails, searches known USDC domains to say _why_: wrong domain name or version, wrong chain, wrong token, or a genuinely bad signature. Validity window vs now, `to` vs `payTo`, value vs required amount                                                                                                                                                             |
-| exact / upto / EVM / **Permit2**                                                            | inside the payload                               | Nested EIP-712 signer recovery, spender must be the x402 Permit2 proxy, witness recipient vs `payTo`, token vs asset, deadline, wrong-chain detection                                                                                                                                                                                                                                                                                          |
-| exact / **SVM** (base64 versioned tx)                                                       | inside the payload, or `svm.transaction` bare    | Own wire-format parser (legacy and v0). Lists every instruction in English, verifies payer ed25519 signatures, checks the destination is `payTo`'s associated token account, CU price cap of 5,000,000 microlamports, fee payer vs `extra.feePayer`, fee payer acting as transfer authority, unknown programs, approvals                                                                                                                       |
+| exact / EVM / **EIP-3009**                                                                  | inside the payload                               | Recovers the signer from the EIP-712 digest and compares to `from`. If it fails, searches known USDC domains to say _why_: wrong domain name or version, wrong chain, wrong token, or a genuinely bad signature. Validity window vs now using the contract's exact bounds (`validAfter < now < validBefore`), `to` vs `payTo`, value vs required amount, values that overflow uint256, and high-s signatures USDC rejects                                                                                                                                                             |
+| exact / upto / EVM / **Permit2**                                                            | inside the payload                               | Nested EIP-712 signer recovery, spender must be the x402 Permit2 proxy, witness recipient vs `payTo`, token vs asset, deadline and witness `validAfter` (both inclusive, as Permit2 and the proxy compare them), wrong-chain detection                                                                                                                                                                                                                                                                                          |
+| exact / **SVM** (base64 versioned tx)                                                       | inside the payload, or `svm.transaction` bare    | Own wire-format parser (legacy and v0). Lists every instruction in English, verifies payer ed25519 signatures, checks the destination is `payTo`'s associated token account, CU price cap of 5,000,000 microlamports, fee payer vs `extra.feePayer`, fee payer acting as transfer authority, unknown programs, approvals, truncated instructions                                                                                                                       |
 | x402 **SettleResponse / VerifyResponse**                                                    | `x402.settle-response`, `x402.verify-response`   | Error reasons explained in English                                                                                                                                                                                                                                                                                                                                                                                                             |
 | x402 facilitator **`/verify` `/settle` bodies**, **`/supported`**                           | `x402.facilitator-request`, `x402.supported`     | Payload checked against `paymentRequirements`, and the two are compared                                                                                                                                                                                                                                                                                                                                                                        |
 | **MCP `_meta`** and **A2A metadata** wrappers, JSON-RPC envelopes                           | the inner artifact, or `container`               | Unwrapped automatically                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| **AP2 v0.2 SD-JWT mandate chains** (`~~`-joined)                                            | `ap2.mandate-chain`                              | Splits hops, resolves `...` and `_sd` disclosure digests, renders each mandate by `vct`, verifies ES256 hop signatures with the previous hop's `cnf.jwk`, verifies `sd_hash` / `issuer_jwt_hash`, checks `checkout_hash` against the embedded checkout JWT, flags expired or unbound hops, and cross-checks that the closed mandate is within the open mandate's constraints. The root issuer signature is reported as "not verified (no key)" |
+| **AP2 v0.2 SD-JWT mandate chains** (`~~`-joined)                                            | `ap2.mandate-chain`                              | Splits hops, resolves `...` and `_sd` disclosure digests (rejecting duplicate digests and claim collisions per RFC 9901), renders each mandate by `vct`, verifies ES256 hop signatures with the previous hop's `cnf.jwk`, verifies `sd_hash` / `issuer_jwt_hash`, checks `checkout_hash` against the embedded checkout JWT, flags expired or unbound hops, and cross-checks that the closed mandate is within the open mandate's constraints. The root issuer signature is reported as "not verified (no key)" |
 | **AP2 v0.1** Intent / Cart / Payment mandates                                               | `ap2.v01.*`                                      | Rendered and flagged (no expiry, any merchant, no cart confirmation, missing merchant or user authorization). Embedded x402 objects are decoded as children                                                                                                                                                                                                                                                                                    |
 | **AP2 x x402 credential bundle** `{payment_mandate_chain, payment_nonce, eip_3009_payload}` | `ap2.x402-credential`                            | EIP-3009 nonce must equal keccak256(chain), `payment_nonce` vs the agent-signed KB nonce, amount vs the closed mandate, plus the full EIP-3009 check (network inferred from the signature domain)                                                                                                                                                                                                                                              |
 | **MPP** `WWW-Authenticate: Payment`, `Authorization: Payment`, `Payment-Receipt`            | `mpp.challenge`, `mpp.credential`, `mpp.receipt` | Decodes the challenge and its `request`, expiry, body digest binding. Proofs are "not verified (no key)"                                                                                                                                                                                                                                                                                                                                       |
@@ -52,7 +53,7 @@ Input can be a bare value, `Header: value`, a `curl -H '...'` line, raw JSON, a 
 ```
 paydecode <blob>            decode a header value, JSON, SD-JWT, base64 tx...
 paydecode <file>            decode the contents of a file
-echo <blob> | paydecode     read from stdin
+echo <blob> | paydecode     read from stdin (or pass - as the blob)
 curl -si https://api.example.com/paid | paydecode
 ```
 
@@ -64,7 +65,7 @@ curl -si https://api.example.com/paid | paydecode
 | `--strict` | Exit with code 3 if any DANGER flag is raised, anywhere in the result tree |
 | `-h`, `--help` | Show help |
 
-Exit codes: `0` decoded, `1` unrecognized input, `2` usage error, `3` danger flag under `--strict`.
+Exit codes: `0` decoded (or `--help`), `1` unrecognized or empty input, `2` usage error (unknown option, `--now` that isn't whole unix seconds) or an unexpected crash, `3` danger flag under `--strict`. A single argument naming an existing file (optionally `@file`) is read as a file.
 
 ## Library
 
@@ -90,6 +91,7 @@ Nested artifacts (the mandate chain inside an AP2 bundle, the x402 requirements 
 | Export | Description |
 |---|---|
 | `decode(input: string, opts?: { now?: number }): Decoded \| Unrecognized` | Decode any supported artifact. `now` is unix seconds (default: the clock). Never throws |
+| `MAX_INPUT_LENGTH` | `1_000_000`. Longer input returns `Unrecognized` with `INPUT_TOO_LARGE`; JSON nested deeper than 64 levels returns `JSON_TOO_DEEP` |
 | `detect(input: string): Detection` | `{ kind, header?, encoding? }`: what the input is, without the explanation |
 | `parseTransaction(bytes: Uint8Array): ParsedTx` | Parse a legacy or v0 Solana transaction (throws on malformed bytes) |
 | `associatedTokenAddress(owner, mint, tokenProgram?)` | Derive an SPL associated token account (base58) |
@@ -104,15 +106,16 @@ Nested artifacts (the mandate chain inside an AP2 bundle, the x402 requirements 
 
 ### Public types
 
-`src/types.ts` only ever grows additively. Optional fields added on top of the original contract:
+The result contract is the types `Decoded`, `Unrecognized`, `Section`, `Field`, `Flag`, `FlagLevel`, `DecodeOptions` and `Detection`, all exported from the entry point. `src/types.ts` only ever grows additively. Optional fields added on top of the original contract:
 
 | Field | Meaning |
 |---|---|
 | `Section.hop`, `Field.hop` | 1-based hop number for AP2 SD-JWT chain sections and the chain overview's per-hop fields, so UIs don't parse titles |
 | `Field.unixSeconds` | The timestamp behind every `kind: "time"` field that has one, so UIs don't re-parse the human date |
 | `Unrecognized.children?: never` | Lets `result.children` type-check on `Decoded \| Unrecognized` |
+| `SdToken.problems` | RFC 9901 section 7.1 violations found while resolving disclosures (duplicate digests, claim collisions, reserved names); empty when well-formed |
 
-Address fields (`kind: "address"`) always hold a bare address in `value`. Token names and roles go in `note`. `detect()` returns `Detection` (from `src/detect/index.ts`), and the EIP-712 types `Domain`, `TypeMap` and `TypedField` are exported for callers of `typedDataHash`.
+Address fields (`kind: "address"`) always hold a bare address in `value`. Token names and roles go in `note`. `detect()` returns `Detection` (from `src/detect/index.ts`). The types the lower-level functions take and return are exported too: `Domain`, `TypeMap`, `TypedField` (EIP-712), `ParsedTx`, `ParsedInstruction` (Solana), `SdToken`, `Jwt`, `Disclosure` (SD-JWT), and `NetworkInfo`, `EvmToken`, `SplToken`.
 
 ## Why
 
@@ -132,7 +135,7 @@ paydecode works offline: it never sees balances, allowances, used nonces, smart-
 npm run build -w paydecode    # tsup for JS, then tsc for .d.ts (tsup's dts step fails on this toolchain)
 npm test -w paydecode         # vitest
 npm run lint -w paydecode     # ESLint (typescript-eslint, type-aware) + Prettier config
-npx tsx scripts/gen-fixtures.mts   # regenerate test/fixtures/ap2-x402-bundle.json
+npm run fixtures -w paydecode   # regenerate test/fixtures/ap2-x402-bundle.json (Node 22.6+)
 ```
 
 Fixtures: `test/fixtures/fixtures.json` (verbatim x402 and AP2 artifacts), `ap2-checkout-chain.txt` (verbatim from the AP2 docs), `ap2-x402-bundle.json` (the AP2 sample's credential bundle reproduced with its own default keys). Solana transactions, Permit2 payloads and extra AP2 chains are generated inside the tests with `@solana/web3.js`, `viem` and `@noble/curves`. See [CONTRIBUTING.md](../../CONTRIBUTING.md) to add a format.

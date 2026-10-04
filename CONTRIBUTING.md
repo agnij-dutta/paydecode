@@ -4,7 +4,7 @@ Thanks for helping. The most valuable contributions are **real artifacts that pa
 
 ## Setup
 
-Node 20 or newer.
+Node 20.19 or newer (Node 22.6+ to regenerate fixtures).
 
 ```sh
 git clone https://github.com/agnij-dutta/paydecode.git
@@ -21,6 +21,7 @@ npm ci
 | `npm run build` | Library (`tsup` + `tsc` declarations) and web app (`vite`) |
 | `npm run dev` | Web app on http://localhost:5173 |
 | `npm run paydecode -- <blob>` | Run the built CLI |
+| `npm run fixtures -w paydecode` | Regenerate the synthetic fixtures (deterministic; Node 22.6+) |
 
 CI runs all of these on Node 20 and 22, plus a gitleaks secret scan. Please run `npm run lint && npm run typecheck && npm test && npm run build` before opening a PR.
 
