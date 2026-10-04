@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: lint, typecheck, test, build (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - name: Lint (library + web)
+        run: npm run lint
+      - name: Format check (library + web)
+        run: npm run format:check
+      - name: Typecheck (library + web)
+        run: npm run typecheck
+      - name: Test (library)
+        run: npm test
+      - name: Build (library + web)
+        run: npm run build
+      - name: CLI smoke test
+        run: |
+          out=$(node packages/paydecode/dist/cli.js --now 1777343000 --no-color packages/paydecode/test/fixtures/ap2-x402-bundle.json)
+          echo "$out"
+          echo "$out" | tr -s ' \n' ' ' | grep -q "signed with name 'USD Coin' but Base Sepolia USDC's domain name is 'USDC'"
+
+  secrets:
+    name: secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
