@@ -20,32 +20,6 @@ function relative(deltaSeconds: number): string {
   return "";
 }
 
-/** Pull a unix-seconds timestamp out of a field value (raw seconds, ms, or ISO date). */
-const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
-
-function parseTime(value: string): number | null {
-  // paydecode's own format: "27 Feb 2025, 16:01:29 UTC" (or a bare day "27 Feb 2025").
-  const human = value.match(/\b(\d{1,2}) ([A-Za-z]{3}) (\d{4})(?:,? (\d{2}):(\d{2})(?::(\d{2}))?)?/);
-  if (human) {
-    const mon = MONTHS.indexOf(human[2].toLowerCase());
-    if (mon >= 0) {
-      const t = Date.UTC(+human[3], mon, +human[1], +(human[4] ?? 0), +(human[5] ?? 0), +(human[6] ?? 0));
-      return Math.floor(t / 1000);
-    }
-  }
-  const iso = value.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?/);
-  if (iso) {
-    const t = Date.parse(iso[0]);
-    if (!Number.isNaN(t)) return Math.floor(t / 1000);
-  }
-  const num = value.match(/\b\d{9,13}\b/);
-  if (num) {
-    const n = Number(num[0]);
-    return num[0].length >= 13 ? Math.floor(n / 1000) : n;
-  }
-  return null;
-}
-
 const EXPIRY = /(valid ?before|valid until|exp|deadline|not.?after|expir)/i;
 const START = /(valid ?after|not.?before|starts)/i;
 
@@ -54,11 +28,15 @@ export interface TimeGloss {
   tone: "past" | "future" | "expired" | "pending";
 }
 
-export function timeGloss(label: string, value: string, now = Date.now() / 1000): TimeGloss | null {
-  const t = parseTime(value);
-  if (t === null) return null;
-  // Ignore obviously non-timestamp numbers (before 2001 or after 2100).
-  if (t < 978307200 || t > 4102444800) return null;
+/**
+ * Relative gloss for a time field, from the library's Field.unixSeconds (never by re-parsing the
+ * display string). Fields without unixSeconds keep the library's own note instead.
+ */
+export function timeGloss(label: string, unixSeconds: number | undefined, now = Date.now() / 1000): TimeGloss | null {
+  if (unixSeconds === undefined) return null;
+  const t = unixSeconds;
+  // Far-future values (e.g. a uint256-max deadline) read better as the library's own note.
+  if (t > 4102444800) return null;
   const delta = t - now;
   const rel = relative(delta);
   if (EXPIRY.test(label)) {

@@ -117,13 +117,13 @@ export function ResultView({ result, now, depth = 0, tone = null, inheritedNet =
       <FlagList flags={result.flags} />
 
       {result.sections.map((s, i) => {
-        const st = chainMode ? toneForHop(s.title) : toneForSection(s.title);
+        const st = chainMode ? toneForHop(s.hop) : toneForSection(s.title);
         return (
           <section key={`${s.title}-${i}`} className={`fields ${st !== null ? `tone-${st}` : ""}`}>
             <SectionHeading>{s.title}</SectionHeading>
             <dl>
               {s.fields.map((f, j) => (
-                <FieldRow key={`${f.label}-${j}`} field={f} net={net} now={now} tone={chainMode ? toneForHop(f.label) : null} />
+                <FieldRow key={`${f.label}-${j}`} field={f} net={net} now={now} tone={chainMode ? toneForHop(f.hop) : null} />
               ))}
             </dl>
           </section>

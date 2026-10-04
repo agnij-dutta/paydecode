@@ -140,12 +140,16 @@ export default function App() {
   const chainMode = seg.mode === "chain";
   const children = result?.ok && "children" in result.value ? (result.value.children ?? []) : [];
 
-  const hopTitles = result?.ok ? result.value.sections.map((s) => s.title).filter((t) => /^Hop \d+/.test(t)) : [];
+  // Legend labels come from the Chain section's per-hop rows (Field.hop, value = mandate label).
+  const hopLabels = new Map<number, string>();
+  if (result?.ok)
+    for (const sec of result.value.sections)
+      for (const f of sec.fields) if (f.hop !== undefined && !hopLabels.has(f.hop)) hopLabels.set(f.hop, f.value);
   const legend = chainMode
-    ? seg.legend.map((l, i) => ({
-        ...l,
-        label: hopTitles[i] ? hopTitles[i].replace(/:\s*/, " · ") : children[i]?.title ? `Hop ${i + 1} · ${children[i].title}` : l.label,
-      }))
+    ? seg.legend.map((l, i) => {
+        const mandate = hopLabels.get(i + 1) ?? children[i]?.title;
+        return { ...l, label: mandate ? `Hop ${i + 1} · ${mandate}` : l.label };
+      })
     : seg.legend;
 
   const toggleSync = useCallback(() => {

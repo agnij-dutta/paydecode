@@ -19,14 +19,11 @@ function Value({ field, net, now }: { field: Field; net: NetworkInfo | null; now
   const v = field.value;
   switch (field.kind) {
     case "address": {
-      // The library may append context after the address ("0xabc… (USDC)"); split it off.
-      const m = v.match(/^(0x[0-9a-fA-F]{40}|[1-9A-HJ-NP-Za-km-z]{32,44})(.*)$/s);
-      if (!m || !looksLikeAddress(m[1])) return <span className="v-text">{v}</span>;
-      const href = explorerLink(net, m[1], "address");
+      if (!looksLikeAddress(v)) return <span className="v-text">{v}</span>;
+      const href = explorerLink(net, v, "address");
       return (
         <span className="v-line">
-          <Copyable value={m[1]} display={truncateMiddle(m[1], 8, 6)} className="v-mono" />
-          {m[2].trim() && <span className="v-extra">{m[2].trim()}</span>}
+          <Copyable value={v} display={truncateMiddle(v, 8, 6)} className="v-mono" />
           {href && net && <ExplorerLink href={href} net={net} />}
         </span>
       );
@@ -45,7 +42,7 @@ function Value({ field, net, now }: { field: Field; net: NetworkInfo | null; now
     case "amount":
       return <span className="v-mono v-amount">{v}</span>;
     case "time": {
-      const g = timeGloss(field.label, v, now);
+      const g = timeGloss(field.label, field.unixSeconds, now);
       return (
         <span className="v-line">
           <span className="v-mono">{v}</span>
@@ -64,12 +61,12 @@ interface RowProps {
   field: Field;
   net: NetworkInfo | null;
   now: number;
-  /** Palette slot when this row names a colored input segment (e.g. "Hop 2"). */
+  /** Palette slot when this row belongs to a colored input segment (an AP2 hop). */
   tone?: number | null;
 }
 
 export function FieldRow({ field, net, now, tone = null }: RowProps) {
-  const showNote = field.note && !(field.kind === "time" && timeGloss(field.label, field.value, now));
+  const showNote = field.note && !(field.kind === "time" && timeGloss(field.label, field.unixSeconds, now));
   return (
     <div className="row">
       <dt className={tone !== null ? `tone-${tone} dt-tone` : undefined}>{field.label}</dt>
