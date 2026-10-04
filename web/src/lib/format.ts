@@ -21,7 +21,18 @@ export function relative(deltaSeconds: number): string {
 }
 
 /** Pull a unix-seconds timestamp out of a field value (raw seconds, ms, or ISO date). */
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
 export function parseTime(value: string): number | null {
+  // paydecode's own format: "27 Feb 2025, 16:01:29 UTC" (or a bare day "27 Feb 2025").
+  const human = value.match(/\b(\d{1,2}) ([A-Za-z]{3}) (\d{4})(?:,? (\d{2}):(\d{2})(?::(\d{2}))?)?/);
+  if (human) {
+    const mon = MONTHS.indexOf(human[2].toLowerCase());
+    if (mon >= 0) {
+      const t = Date.UTC(+human[3], mon, +human[1], +(human[4] ?? 0), +(human[5] ?? 0), +(human[6] ?? 0));
+      return Math.floor(t / 1000);
+    }
+  }
   const iso = value.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?/);
   if (iso) {
     const t = Date.parse(iso[0]);

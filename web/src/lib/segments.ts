@@ -97,3 +97,9 @@ export function toneForSection(title: string): number | null {
   if (/disclos/i.test(title)) return 3;
   return null;
 }
+
+/** In a `~~` chain, sections and rows named "Hop N" take hop N's palette slot. */
+export function toneForHop(title: string): number | null {
+  const m = title.match(/^Hop (\d+)/);
+  return m ? (Number(m[1]) - 1) % 4 : null;
+}

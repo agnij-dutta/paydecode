@@ -15,6 +15,7 @@
     "moduleDetection": "force",
     "noEmit": true,
     "jsx": "react-jsx",
+    "paths": { "paydecode": ["./src/types/paydecode.d.ts"] },
 
     /* Linting */
     "noUnusedLocals": true,

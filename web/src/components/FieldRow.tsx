@@ -60,11 +60,19 @@ function Value({ field, net, now }: { field: Field; net: NetworkInfo | null; now
   }
 }
 
-export function FieldRow({ field, net, now }: { field: Field; net: NetworkInfo | null; now: number }) {
+interface RowProps {
+  field: Field;
+  net: NetworkInfo | null;
+  now: number;
+  /** Palette slot when this row names a colored input segment (e.g. "Hop 2"). */
+  tone?: number | null;
+}
+
+export function FieldRow({ field, net, now, tone = null }: RowProps) {
   const showNote = field.note && !(field.kind === "time" && timeGloss(field.label, field.value, now));
   return (
     <div className="row">
-      <dt>{field.label}</dt>
+      <dt className={tone !== null ? `tone-${tone} dt-tone` : undefined}>{field.label}</dt>
       <dd>
         <Value field={field} net={net} now={now} />
         {showNote && <span className="note">{field.note}</span>}

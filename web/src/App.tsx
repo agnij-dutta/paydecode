@@ -1,7 +1,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Editor } from "./components/Editor";
 import { ResultView } from "./components/ResultView";
-import { runDecode, type Result } from "./lib/decoder";
+import type { Result } from "./lib/decoder";
 import { EXAMPLES } from "./lib/examples";
 import { segmentInput } from "./lib/segments";
 
@@ -52,9 +52,30 @@ function useTheme() {
   return { theme, cycle };
 }
 
+// The decoder (and its crypto) loads as a separate chunk so the page paints first.
+// It is still plain JavaScript running in this tab: no input ever leaves the browser.
+interface DecoderApi {
+  runDecode: (input: string, now?: number) => Result;
+  buildBrokenExample: () => string;
+}
+let decoderApi: DecoderApi | null = null;
+const decoderReady: Promise<DecoderApi> = Promise.all([import("./lib/decoder"), import("./lib/brokenExample")]).then(
+  ([d, b]) => (decoderApi = { runDecode: d.runDecode, buildBrokenExample: b.buildBrokenExample }),
+);
+
+// The broken example is signed in-page (fresh validity window), then reused until clicked again.
+const generated: Record<string, string> = {};
+
 function exampleText(id: string) {
   const ex = EXAMPLES.find((e) => e.id === id);
   if (!ex) return "";
+  if (ex.id === "broken-domain" && decoderApi) {
+    try {
+      return (generated[id] ??= decoderApi.buildBrokenExample());
+    } catch {
+      /* fall back to the static, unsigned-for-the-wrong-domain variant */
+    }
+  }
   return ex.header ? `${ex.header}: ${ex.value}` : ex.value;
 }
 
@@ -66,6 +87,11 @@ export default function App() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const { theme, cycle } = useTheme();
   const deferred = useDeferredValue(input);
+  const [api, setApi] = useState<DecoderApi | null>(decoderApi);
+
+  useEffect(() => {
+    if (!api) decoderReady.then(setApi);
+  }, [api]);
 
   // Keep relative times honest while the page is open.
   useEffect(() => {
@@ -100,13 +126,13 @@ export default function App() {
   }, [input, urlSync]);
 
   const result = useMemo<{ ok: true; value: Result } | { ok: false; error: string } | null>(() => {
-    if (!deferred.trim()) return null;
+    if (!deferred.trim() || !api) return null;
     try {
-      return { ok: true, value: runDecode(deferred) };
+      return { ok: true, value: api.runDecode(deferred, now) };
     } catch (e) {
       return { ok: false, error: e instanceof Error ? e.message : String(e) };
     }
-  }, [deferred]);
+  }, [deferred, now, api]);
 
   const seg = useMemo(() => segmentInput(deferred), [deferred]);
   const activeExample = EXAMPLES.find((e) => exampleText(e.id) === input.trim())?.id;
@@ -114,8 +140,12 @@ export default function App() {
   const chainMode = seg.mode === "chain";
   const children = result?.ok && "children" in result.value ? (result.value.children ?? []) : [];
 
+  const hopTitles = result?.ok ? result.value.sections.map((s) => s.title).filter((t) => /^Hop \d+/.test(t)) : [];
   const legend = chainMode
-    ? seg.legend.map((l, i) => ({ ...l, label: children[i]?.title ? `Hop ${i + 1} · ${children[i].title}` : l.label }))
+    ? seg.legend.map((l, i) => ({
+        ...l,
+        label: hopTitles[i] ? hopTitles[i].replace(/:\s*/, " · ") : children[i]?.title ? `Hop ${i + 1} · ${children[i].title}` : l.label,
+      }))
     : seg.legend;
 
   const toggleSync = useCallback(() => {
@@ -169,7 +199,10 @@ export default function App() {
             type="button"
             className={`example ${ex.broken ? "example-broken" : ""} ${activeExample === ex.id ? "is-active" : ""}`}
             aria-pressed={activeExample === ex.id}
-            onClick={() => setInput(exampleText(ex.id))}
+            onClick={() => {
+              if (ex.id === "broken-domain") delete generated[ex.id];
+              setInput(exampleText(ex.id));
+            }}
           >
             {ex.label}
           </button>

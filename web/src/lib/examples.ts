@@ -1,5 +1,6 @@
 // Generated from packages/paydecode/test/fixtures/fixtures.json.
 // "broken-domain" is the x402 v2 payment fixture with accepted.extra.name changed to "USD Coin".
+// At runtime App re-signs it under that wrong domain (see brokenExample.ts); this static value is the fallback.
 export interface Example { id: string; label: string; header?: string; value: string; broken?: boolean }
 export const EXAMPLES: Example[] = [
   {

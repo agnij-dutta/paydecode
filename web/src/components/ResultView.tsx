@@ -1,6 +1,6 @@
 import type { Decoded, Flag, FlagLevel, Result } from "../lib/decoder";
 import { findNetwork, type NetworkInfo } from "../lib/networks";
-import { toneForSection } from "../lib/segments";
+import { toneForHop, toneForSection } from "../lib/segments";
 import { FieldRow } from "./FieldRow";
 import { RawJson } from "./RawJson";
 
@@ -11,13 +11,34 @@ export function sortFlags(flags: Flag[]) {
   return [...flags].sort((a, b) => ORDER[a.level] - ORDER[b.level]);
 }
 
-/** Set amounts, addresses and hashes inside the summary sentence in the data face. */
-function Summary({ text }: { text: string }) {
-  const parts = text.split(/(0x[0-9a-fA-F]{6,}…?[0-9a-fA-F]*|\b\d[\d,]*(?:\.\d+)?\s?(?:USDC|USD|EUR|SOL|ETH|USDT|EURC)\b|\$\d[\d,]*(?:\.\d+)?)/g);
+const DATA =
+  /(0x[0-9a-fA-F]{3,}…[0-9a-fA-F]{3,}|0x[0-9a-fA-F]{40,}|\b[A-Za-z0-9_-]{4,}…[A-Za-z0-9_-]{3,}|\$\d[\d,]*(?:\.\d+)?(?:\s?[A-Z]{3}\b)?|\b\d[\d,]*(?:\.\d+)?\s?(?:USDC|USDT|EURC|USD|EUR|SOL|ETH)\b)/g;
+const BAD = /(reject|expired|invalid|will not|won't|revert|fail|mismatch|exceeds|outside)/i;
+
+/** Set amounts, addresses and hashes inside a sentence in the data face. */
+function withData(text: string) {
+  return text.split(DATA).map((p, i) => (i % 2 === 1 ? <span key={i} className="summary-data">{p}</span> : p));
+}
+
+/** Lead sentence large; the rest smaller, with failure sentences in the danger color. */
+function Summary({ text, danger }: { text: string; danger: boolean }) {
+  const [lead, ...rest] = text.split(/(?<=[.!?]["']?)\s+(?=[A-Z])/);
   return (
-    <p className="summary">
-      {parts.map((p, i) => (i % 2 === 1 ? <span key={i} className="summary-data">{p}</span> : p))}
-    </p>
+    <div className="summary-block">
+      <p className={`summary ${lead.length > 170 ? "summary-long" : ""}`}>{withData(lead)}</p>
+      {rest.length > 0 && (
+        <p className="summary-rest">
+          {rest
+            .join(" ")
+            .split(/(?<=;)\s+/)
+            .map((clause, i) => (
+              <span key={i} className={danger && BAD.test(clause) ? "s-bad" : undefined}>
+                {withData(clause)}{" "}
+              </span>
+            ))}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -81,18 +102,18 @@ export function ResultView({ result, now, depth = 0, tone = null, inheritedNet =
           <code>{result.kind}</code>
         </header>
       ) : null}
-      <Summary text={result.summary} />
+      <Summary text={result.summary} danger={result.flags.some((f) => f.level === "danger")} />
       {!nested && <Tally flags={result.flags} />}
       <FlagList flags={result.flags} />
 
       {result.sections.map((s, i) => {
-        const st = chainMode ? null : toneForSection(s.title);
+        const st = chainMode ? toneForHop(s.title) : toneForSection(s.title);
         return (
           <section key={`${s.title}-${i}`} className={`fields ${st !== null ? `tone-${st}` : ""}`}>
             <h4>{s.title}</h4>
             <dl>
               {s.fields.map((f, j) => (
-                <FieldRow key={`${f.label}-${j}`} field={f} net={net} now={now} />
+                <FieldRow key={`${f.label}-${j}`} field={f} net={net} now={now} tone={chainMode ? toneForHop(f.label) : null} />
               ))}
             </dl>
           </section>
