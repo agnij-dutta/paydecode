@@ -141,7 +141,9 @@ describe("unrecognized input", () => {
   it("never throws, and explains what it saw", () => {
     expect(decode("").kind).toBe("unknown");
     expect(decode("hello world").summary).toContain("Not JSON, base64, a JWT/SD-JWT, or a known payment header");
-    expect(decode("x".repeat(200)).summary).toBe(`Not JSON, base64, a JWT/SD-JWT, or a known payment header (starts with "${"x".repeat(16)}…").`);
+    expect(decode("x".repeat(200)).summary).toBe(
+      `Not JSON, base64, a JWT/SD-JWT, or a known payment header (starts with "${"x".repeat(16)}…").`,
+    );
     const j = decode(JSON.stringify({ foo: 1, bar: [1, 2] }));
     expect(j.kind).toBe("unknown");
     expect(j.summary).toBe("This is valid JSON, but no known payment schema matched it. The parsed JSON is below.");
