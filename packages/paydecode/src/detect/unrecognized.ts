@@ -1,5 +1,5 @@
 // The Unrecognized result: explains what the input looked like when no decoder matched.
-import { decodeBase64, isRecord, tryJson, utf8 } from "../core/encoding.js";
+import { MAX_JSON_DEPTH, decodeBase64, isRecord, jsonTooDeep, tryJson, utf8 } from "../core/encoding.js";
 import { field, flag, section, short } from "../core/format.js";
 import { looksLikeJwt, looksLikeSdJwt } from "../crypto/sdjwt.js";
 import type { Flag, Unrecognized } from "../types.js";
@@ -15,7 +15,11 @@ export function unrecognized(input: string, header?: string): Unrecognized {
   const j = tryJson(text);
   const bytes = j === undefined ? decodeBase64(text) : null;
   const bj = bytes ? tryJson(utf8(bytes)) : undefined;
-  if (j !== undefined || bj !== undefined) {
+  const deepText = j === undefined && /^[[{]/.test(text) ? text : bytes && j === undefined && bj === undefined ? utf8(bytes).trim() : "";
+  if (/^[[{]/.test(deepText) && jsonTooDeep(deepText)) {
+    summary = `This looks like JSON${deepText === text ? "" : " (base64-encoded)"} nested more than ${MAX_JSON_DEPTH} levels deep. No payment artifact nests that far, so it wasn't parsed.`;
+    flags.push(flag("warn", "JSON_TOO_DEEP", `JSON nesting exceeds ${MAX_JSON_DEPTH} levels; not decoded.`));
+  } else if (j !== undefined || bj !== undefined) {
     const val = j ?? bj;
     raw = val;
     summary =

@@ -55,6 +55,8 @@ export class Reader {
     let len = 0;
     for (let i = 0; i < 3; i++) {
       const b = this.u8();
+      // compact-u16 caps at 0xffff: the third byte may only carry 2 bits.
+      if (i === 2 && b > 0x03) throw new Error("bad compact-u16");
       len |= (b & 0x7f) << (7 * i);
       if (!(b & 0x80)) return len;
     }
@@ -132,10 +134,17 @@ export function looksLikeTransaction(bytes: Uint8Array): boolean {
   }
 }
 
-export const u32 = (d: Uint8Array, o: number) => (d[o] | (d[o + 1] << 8) | (d[o + 2] << 16)) + d[o + 3] * 0x1000000;
+/** Little-endian u32 at `o`. Throws instead of reading past the end (callers check lengths first). */
+export function u32(d: Uint8Array, o: number): number {
+  if (o < 0 || o + 4 > d.length) throw new Error(`u32 read at ${o} past the end of ${d.length} bytes`);
+  return (d[o] | (d[o + 1] << 8) | (d[o + 2] << 16)) + d[o + 3] * 0x1000000;
+}
+
+/** Little-endian u64 at `o`. Throws instead of reading past the end. */
 export function u64(d: Uint8Array, o: number): bigint {
+  if (o < 0 || o + 8 > d.length) throw new Error(`u64 read at ${o} past the end of ${d.length} bytes`);
   let v = 0n;
-  for (let i = 7; i >= 0; i--) v = (v << 8n) | BigInt(d[o + i] ?? 0);
+  for (let i = 7; i >= 0; i--) v = (v << 8n) | BigInt(d[o + i]);
   return v;
 }
 

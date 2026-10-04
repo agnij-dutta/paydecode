@@ -2,7 +2,7 @@
 // delegation-chain (`~~`) splitting, as used by AP2 v0.2 mandates.
 import { sha256, sha384, sha512 } from "@noble/hashes/sha2.js";
 import { p256 } from "@noble/curves/nist.js";
-import { b64url, fromB64url, isRecord, parseJsonLoose, utf8 } from "../core/encoding.js";
+import { b64url, fromB64url, isRecord, parseJsonLoose, setOwn, utf8 } from "../core/encoding.js";
 import { asText } from "../core/format.js";
 
 type Obj = Record<string, unknown>;
@@ -36,6 +36,8 @@ export interface SdToken {
   resolved: Obj;
   /** Digests that had no matching disclosure (selectively hidden claims). */
   undisclosed: number;
+  /** RFC 9901 section 7.1 processing errors (duplicate digests, claim collisions, reserved names). Empty when well-formed. */
+  problems: string[];
 }
 
 export function parseJwt(raw: string): Jwt | undefined {
@@ -64,17 +66,34 @@ export function sdHash(s: string, alg: unknown = "sha-256"): string {
   return b64url(fn(enc.encode(s)));
 }
 
-export function resolve(v: unknown, byDigest: Map<string, Disclosure>, counter: { undisclosed: number }): unknown {
+interface ResolveState {
+  undisclosed: number;
+  /** RFC 9901 section 7.1 violations: the SD-JWT must be rejected when any of these occur. */
+  problems: string[];
+  seenDigests: Set<string>;
+}
+
+export function resolve(v: unknown, byDigest: Map<string, Disclosure>, state: ResolveState): unknown {
+  const once = (digest: string): boolean => {
+    if (state.seenDigests.has(digest)) {
+      state.problems.push(`digest ${digest.slice(0, 12)}… appears more than once`);
+      return false;
+    }
+    state.seenDigests.add(digest);
+    return true;
+  };
   if (Array.isArray(v)) {
     const out: unknown[] = [];
     for (const el of v) {
       if (isRecord(el) && Object.keys(el).length === 1 && typeof el["..."] === "string") {
         const d = byDigest.get(el["..."]);
+        if (!once(el["..."])) continue;
         if (d && d.name === undefined) {
           d.used = true;
-          out.push(resolve(d.value, byDigest, counter));
-        } else counter.undisclosed++;
-      } else out.push(resolve(el, byDigest, counter));
+          out.push(resolve(d.value, byDigest, state));
+        } else if (d) state.problems.push(`object-property disclosure '${d.name}' is referenced from an array`);
+        else state.undisclosed++;
+      } else out.push(resolve(el, byDigest, state));
     }
     return out;
   }
@@ -82,15 +101,22 @@ export function resolve(v: unknown, byDigest: Map<string, Disclosure>, counter: 
     const out: Obj = {};
     for (const [k, val] of Object.entries(v)) {
       if (k === "_sd" || k === "_sd_alg") continue;
-      out[k] = resolve(val, byDigest, counter);
+      setOwn(out, k, resolve(val, byDigest, state));
     }
     if (Array.isArray(v._sd)) {
       for (const dg of v._sd) {
-        const d = byDigest.get(asText(dg));
+        const digest = asText(dg);
+        const d = byDigest.get(digest);
+        if (!once(digest)) continue;
         if (d && d.name !== undefined) {
           d.used = true;
-          out[d.name] = resolve(d.value, byDigest, counter);
-        } else counter.undisclosed++;
+          if (d.name === "_sd" || d.name === "..." || d.name === "_sd_alg")
+            state.problems.push(`a disclosure uses the reserved claim name '${d.name}'`);
+          else if (Object.prototype.hasOwnProperty.call(out, d.name))
+            state.problems.push(`disclosed claim '${d.name}' collides with a claim already in the payload`);
+          else setOwn(out, d.name, resolve(d.value, byDigest, state));
+        } else if (d) state.problems.push("an array-element disclosure is referenced from _sd");
+        else state.undisclosed++;
       }
     }
     return out;
@@ -120,10 +146,11 @@ export function parseSdToken(raw: string): SdToken | undefined {
     });
   }
   const byDigest = new Map(disclosures.map((d) => [d.digest, d]));
-  const counter = { undisclosed: 0 };
-  const resolved = resolve(jwt.payload, byDigest, counter) as Obj;
+  const state: ResolveState = { undisclosed: 0, problems: [], seenDigests: new Set() };
+  if (byDigest.size !== disclosures.length) state.problems.push("the same disclosure is attached more than once");
+  const resolved = resolve(jwt.payload, byDigest, state) as Obj;
   const sdJwt = jwt.raw + "~" + discRaw.join("~") + (discRaw.length ? "~" : "");
-  return { raw, jwt, disclosures, sdJwt, resolved, undisclosed: counter.undisclosed };
+  return { raw, jwt, disclosures, sdJwt, resolved, undisclosed: state.undisclosed, problems: state.problems };
 }
 
 /** Split an AP2 delegation chain on `~~` and parse each hop. */

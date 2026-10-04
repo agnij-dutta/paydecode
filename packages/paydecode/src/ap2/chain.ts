@@ -36,6 +36,7 @@ export function decodeSdJwtChain(input: string, now: number): ChainResult | unde
   let sigBad = 0;
   let bindOk = 0;
   let bindBad = 0;
+  let sdBad = 0;
 
   hops.forEach((hop, i) => {
     const label = `Hop ${i + 1}`;
@@ -169,6 +170,15 @@ export function decodeSdJwtChain(input: string, now: number): ChainResult | unde
       if (jexp <= now) flags.push(flag("danger", "HOP_EXPIRED", `${label}: the JWT expired ${relative(jexp, now)}.`));
     }
     fields.push(field("Disclosures", `${hop.disclosures.length} revealed${hop.undisclosed ? `, ${hop.undisclosed} kept hidden` : ""}`));
+    sdBad += hop.problems.length;
+    for (const problem of hop.problems)
+      flags.push(
+        flag(
+          "danger",
+          "SD_JWT_MALFORMED",
+          `${label}: ${problem}. RFC 9901 says a verifier must reject this SD-JWT, so the claims shown for it can't be trusted.`,
+        ),
+      );
     const unused = hop.disclosures.filter((d) => !d.used);
     if (unused.length)
       flags.push(
@@ -263,7 +273,7 @@ export function decodeSdJwtChain(input: string, now: number): ChainResult | unde
     parts.push(`AP2 closed ${kindWord} mandate: ${closedV.english}.`);
   } else parts.push(`SD-JWT delegation chain with ${hops.length} hop(s).`);
   const sigBits: string[] = [];
-  if (sigBad || bindBad) sigBits.push(`${sigBad + bindBad} signature/binding check(s) FAILED`);
+  if (sigBad || bindBad || sdBad) sigBits.push(`${sigBad + bindBad + sdBad} signature/binding/SD-JWT check(s) FAILED`);
   else if (sigVerified || bindOk) sigBits.push(`${hops.length > 1 ? "agent signature and sd_hash binding verify" : "signature verifies"}`);
   if (sigUnchecked) sigBits.push("the root issuer signature isn't checked (no key)");
   const expired = flags.some((f) => f.code === "MANDATE_EXPIRED" || f.code === "HOP_EXPIRED");

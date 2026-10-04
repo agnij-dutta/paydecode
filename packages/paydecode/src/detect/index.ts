@@ -18,6 +18,12 @@ export interface Detection {
   encoding?: string;
 }
 
+/**
+ * Largest input decode() will look at, in UTF-16 code units (~1 MB). Real artifacts are a few KB
+ * (a Solana tx is at most 1232 bytes); the cap bounds time and memory on hostile pastes.
+ */
+export const MAX_INPUT_LENGTH = 1_000_000;
+
 export function nowOf(opts?: DecodeOptions): number {
   return opts?.now ?? Math.floor(Date.now() / 1000);
 }
@@ -29,6 +35,18 @@ export function nowOf(opts?: DecodeOptions): number {
 export function decode(input: string, opts?: DecodeOptions): Decoded | Unrecognized {
   const ctx: Ctx = { now: nowOf(opts), depth: 0 };
   try {
+    if (typeof input === "string" && input.length > MAX_INPUT_LENGTH) {
+      return {
+        kind: "unknown",
+        title: "Input too large",
+        summary: `The input is ${input.length.toLocaleString("en-US")} characters; paydecode decodes at most ${MAX_INPUT_LENGTH.toLocaleString("en-US")}. Payment artifacts are a few kilobytes, so paste just the header value, JSON body or token.`,
+        sections: [],
+        flags: [
+          flag("warn", "INPUT_TOO_LARGE", `Input exceeds ${MAX_INPUT_LENGTH.toLocaleString("en-US")} characters and was not decoded.`),
+        ],
+        raw: null,
+      };
+    }
     if (typeof input !== "string" || !input.trim()) {
       return {
         kind: "unknown",
@@ -74,14 +92,28 @@ export function decode(input: string, opts?: DecodeOptions): Decoded | Unrecogni
     }
     return unrecognized(text, header);
   } catch (e) {
-    const u = unrecognized(input);
-    u.flags.push(flag("warn", "DECODER_ERROR", `Decoder error: ${(e as Error).message}`));
-    return u;
+    const message = `Decoder error: ${e instanceof Error ? e.message : String(e)}`;
+    try {
+      const u = unrecognized(input);
+      u.flags.push(flag("warn", "DECODER_ERROR", message));
+      return u;
+    } catch {
+      // Last resort: decode() must never throw, even if explaining the input fails too.
+      return {
+        kind: "unknown",
+        title: "Unrecognized input",
+        summary: message,
+        sections: [],
+        flags: [flag("warn", "DECODER_ERROR", message)],
+        raw: null,
+      };
+    }
   }
 }
 
 /** Identify the artifact type without returning the full explanation. */
 export function detect(input: string): Detection {
+  if (typeof input === "string" && input.length > MAX_INPUT_LENGTH) return { kind: "unknown" };
   const { header } = unwrapHeader(asText(input, ""));
   const d = decode(asText(input, ""), { now: 0 });
   const t = asText(input, "").trim();

@@ -47,9 +47,39 @@ export function utf8(bytes: Uint8Array): string {
   return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
 }
 
+/**
+ * Nesting limit for untrusted JSON. Real payment artifacts nest fewer than 10 levels; the
+ * decoders walk values recursively, so a 100k-deep array would otherwise overflow the stack.
+ */
+export const MAX_JSON_DEPTH = 64;
+
+/** True if `s` nests objects/arrays deeper than `max` (string contents are skipped). Linear, no recursion. */
+export function jsonTooDeep(s: string, max = MAX_JSON_DEPTH): boolean {
+  let depth = 0;
+  let inString = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (inString) {
+      if (c === 92)
+        i++; // backslash: skip the escaped char
+      else if (c === 34) inString = false;
+    } else if (c === 34) inString = true;
+    else if (c === 123 || c === 91) {
+      if (++depth > max) return true;
+    } else if (c === 125 || c === 93) depth--;
+  }
+  return false;
+}
+
+/** Define an own data property, so an untrusted "__proto__" key can't swap the object's prototype. */
+export function setOwn(o: Record<string, unknown>, key: string, value: unknown): void {
+  Object.defineProperty(o, key, { value, enumerable: true, writable: true, configurable: true });
+}
+
 export function tryJson(s: string): unknown {
   const t = s.trim();
   if (!(t.startsWith("{") || t.startsWith("["))) return undefined;
+  if (jsonTooDeep(t)) return undefined;
   try {
     return JSON.parse(t);
   } catch {
@@ -95,6 +125,7 @@ export function fromB64url(s: string): Uint8Array | null {
 
 /** Parse a JSON string, returning undefined instead of throwing. Accepts any JSON value. */
 export function parseJsonLoose(s: string): unknown {
+  if (jsonTooDeep(s)) return undefined;
   try {
     return JSON.parse(s);
   } catch {

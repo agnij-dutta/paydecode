@@ -158,4 +158,41 @@ describe("SVM exact", () => {
     const d = dec(Buffer.from(tx.serialize()).toString("base64"), NOW);
     expect(codes(d)).toContain("SVM_FEE_PAYER_IS_AUTHORITY");
   });
+
+  it("truncated or short instructions are reported as malformed, never decoded as zeros or NaN", () => {
+    const COMPUTE_BUDGET = new PublicKey("ComputeBudget111111111111111111111111111111");
+    const SYSTEM = new PublicKey("11111111111111111111111111111111");
+    const extra = [
+      // SetComputeUnitPrice with 2 of its 8 price bytes
+      new TransactionInstruction({ programId: COMPUTE_BUDGET, keys: [], data: Buffer.from([3, 0xff, 0xff]) }),
+      // System transfer missing the lamports
+      new TransactionInstruction({
+        programId: SYSTEM,
+        keys: [{ pubkey: payer.publicKey, isSigner: true, isWritable: true }],
+        data: Buffer.from([2, 0, 0, 0, 1]),
+      }),
+      // TransferChecked with only 2 accounts
+      new TransactionInstruction({
+        programId: TOKEN,
+        keys: [
+          { pubkey: ata(payer.publicKey), isSigner: false, isWritable: true },
+          { pubkey: USDC_DEVNET, isSigner: false, isWritable: false },
+        ],
+        data: Buffer.from([12, 1, 0, 0, 0, 0, 0, 0, 0, 6]),
+      }),
+      // Approve with no amount
+      new TransactionInstruction({ programId: TOKEN, keys: [], data: Buffer.from([4]) }),
+    ];
+    const d = dec(payload(buildTx({ extra })), NOW);
+    const malformed = d.flags.filter((f) => f.code === "SVM_MALFORMED_IX").map((f) => f.message);
+    expect(malformed).toHaveLength(4);
+    expect(malformed[0]).toContain("Compute Budget instruction is malformed (3 data bytes, expected 9)");
+    expect(JSON.stringify(d)).not.toMatch(/NaN|lookup-table account #NaN/);
+    // the well-formed TransferChecked is still the one analyzed
+    expect(codes(d)).toContain("AMOUNT_MATCHES");
+  });
+
+  it("rejects a compact-u16 length whose third byte overflows 16 bits", () => {
+    expect(() => parseTransaction(new Uint8Array([0x80, 0x80, 0x04]))).toThrow("bad compact-u16");
+  });
 });

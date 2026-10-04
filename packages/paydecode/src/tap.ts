@@ -1,6 +1,7 @@
 // Visa Trusted Agent Protocol signatures: RFC 9421 HTTP Message Signatures (Signature-Input).
 // Specs: https://www.rfc-editor.org/rfc/rfc9421 and https://github.com/visa/trusted-agent-protocol
 import { duration, field, flag, formatTime, listJoin, relative, section, timeField, toUnix } from "./core/format.js";
+import { setOwn } from "./core/encoding.js";
 import { make } from "./core/result.js";
 import type { Decoded, Flag } from "./types.js";
 
@@ -14,7 +15,7 @@ export function decodeSignatureInput(value: string, now: number, signature?: str
   const params: Record<string, string> = {};
   for (const part of m[3].split(";")) {
     const kv = part.trim().match(/^([A-Za-z0-9_-]+)=(?:"([^"]*)"|(\S+))$/);
-    if (kv) params[kv[1]] = kv[2] ?? kv[3];
+    if (kv) setOwn(params, kv[1], kv[2] ?? kv[3]);
   }
   const keyid = params.keyid ?? params.keyId ?? params.KeyId;
   for (const k of Object.keys(params)) if (k.toLowerCase() === "keyid") params.keyid = params[k];

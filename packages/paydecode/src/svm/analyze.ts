@@ -33,7 +33,8 @@ export const isZero = (b: Uint8Array) => b.every((x) => x === 0);
 export function analyzeSvmTransaction(b64tx: string, txBytes: Uint8Array, ctx: PaymentContext, now: number): Analysis {
   void now;
   const tx = parseTransaction(txBytes);
-  const key = (i: number) => tx.accountKeys[i] ?? `(lookup-table account #${i - tx.accountKeys.length})`;
+  const key = (i: number | undefined) =>
+    i === undefined ? "(missing account)" : (tx.accountKeys[i] ?? `(lookup-table account #${i - tx.accountKeys.length})`);
   const flags: Flag[] = [];
   const ixs: DecodedIx[] = [];
   const transfers: SvmTransfer[] = [];
@@ -46,6 +47,14 @@ export function analyzeSvmTransaction(b64tx: string, txBytes: Uint8Array, ctx: P
     const program = key(ix.programIdIndex);
     const d = ix.data;
     const acc = (n: number) => key(ix.accounts[n]);
+    // Instruction data and account lists come straight from the wire: check lengths before reading,
+    // so a truncated instruction is reported as malformed instead of decoding as zeros or NaN.
+    const malformed = (programName: string, what: string): DecodedIx => {
+      flags.push(
+        flag("danger", "SVM_MALFORMED_IX", `${programName} instruction is malformed (${what}). The runtime will reject the transaction.`),
+      );
+      return { program, programName, text: `Malformed instruction: ${what}`, known: true };
+    };
     let out: DecodedIx = {
       program,
       programName: "Unknown program",
@@ -54,7 +63,9 @@ export function analyzeSvmTransaction(b64tx: string, txBytes: Uint8Array, ctx: P
     };
     if (program === PROGRAMS.COMPUTE_BUDGET) {
       const name = "Compute Budget";
-      if (d[0] === 2) {
+      const need = d[0] === 3 ? 9 : d[0] === 1 || d[0] === 2 || d[0] === 4 ? 5 : 1;
+      if (d.length < need) out = malformed(name, `${d.length} data bytes, expected ${need}`);
+      else if (d[0] === 2) {
         cuLimit = u32(d, 1);
         out = { program, programName: name, text: `Set compute unit limit to ${cuLimit.toLocaleString("en-US")}`, known: true };
       } else if (d[0] === 3) {
@@ -71,7 +82,14 @@ export function analyzeSvmTransaction(b64tx: string, txBytes: Uint8Array, ctx: P
     } else if (program === PROGRAMS.TOKEN || program === PROGRAMS.TOKEN_2022) {
       const name = program === PROGRAMS.TOKEN ? "SPL Token" : "Token-2022";
       const tag = d[0];
-      if (tag === 12 && d.length >= 10) {
+      const minAccounts: Record<number, number> = { 3: 3, 4: 3, 6: 2, 9: 3, 12: 4, 13: 4 };
+      const minData: Record<number, number> = { 3: 9, 4: 9, 12: 10, 13: 10 };
+      if (d.length === 0) out = malformed(name, "no instruction data");
+      else if (minData[tag] !== undefined && d.length < minData[tag])
+        out = malformed(name, `instruction #${tag} has ${d.length} data bytes, expected ${minData[tag]}`);
+      else if (minAccounts[tag] !== undefined && ix.accounts.length < minAccounts[tag])
+        out = malformed(name, `instruction #${tag} lists ${ix.accounts.length} accounts, expected ${minAccounts[tag]}`);
+      else if (tag === 12) {
         const t: SvmTransfer = {
           kind: "TransferChecked",
           amount: u64(d, 1),
@@ -90,7 +108,7 @@ export function analyzeSvmTransaction(b64tx: string, txBytes: Uint8Array, ctx: P
           text: `TransferChecked ${formatUnits(t.amount, t.decimals!)} ${tok?.symbol ?? `of mint ${short(t.mint)}`} from token account ${short(t.source)} to token account ${short(t.destination)}, authorized by ${short(t.authority)}`,
           known: true,
         };
-      } else if (tag === 3 && d.length >= 9) {
+      } else if (tag === 3) {
         const t: SvmTransfer = {
           kind: "Transfer",
           amount: u64(d, 1),
@@ -145,7 +163,10 @@ export function analyzeSvmTransaction(b64tx: string, txBytes: Uint8Array, ctx: P
     } else if (program === PROGRAMS.LIGHTHOUSE) {
       out = { program, programName: "Lighthouse", text: "Lighthouse assertion (wallet guard injected by Phantom/Solflare)", known: true };
     } else if (program === PROGRAMS.SYSTEM) {
-      if (u32(d, 0) === 2) {
+      if (d.length < 4) out = malformed("System", `${d.length} data bytes, expected at least 4`);
+      else if (u32(d, 0) === 2 && (d.length < 12 || ix.accounts.length < 2))
+        out = malformed("System", `transfer with ${d.length} data bytes and ${ix.accounts.length} accounts, expected 12 and 2`);
+      else if (u32(d, 0) === 2) {
         const lamports = u64(d, 4);
         out = {
           program,

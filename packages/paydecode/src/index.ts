@@ -1,5 +1,5 @@
 // paydecode: jwt.io for agent payments.
-export { decode, detect } from "./detect/index.js";
+export { decode, detect, MAX_INPUT_LENGTH } from "./detect/index.js";
 export type { Detection } from "./detect/index.js";
 export type { Decoded, Section, Field, Flag, FlagLevel, DecodeOptions, Unrecognized } from "./types.js";
 

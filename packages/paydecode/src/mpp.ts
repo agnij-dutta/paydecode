@@ -1,7 +1,7 @@
 // MPP: the HTTP "Payment" authentication scheme (WWW-Authenticate challenge, Authorization
 // credential, Payment-Receipt).
 // Spec: IETF draft-httpauth-payment-01, https://github.com/tempoxyz/mpp-specs/tree/main/specs/core
-import { fromB64url, isRecord, parseJsonLoose, utf8 } from "./core/encoding.js";
+import { fromB64url, isRecord, parseJsonLoose, setOwn, utf8 } from "./core/encoding.js";
 import {
   asText,
   field,
@@ -29,7 +29,7 @@ export function parseAuthParams(s: string): Record<string, string> {
   const out: Record<string, string> = {};
   const re = /([A-Za-z0-9_-]+)\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^,\s]+))/g;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(s))) out[m[1].toLowerCase()] = m[2] !== undefined ? m[2].replace(/\\(.)/g, "$1") : m[3];
+  while ((m = re.exec(s))) setOwn(out, m[1].toLowerCase(), m[2] !== undefined ? m[2].replace(/\\(.)/g, "$1") : m[3]);
   return out;
 }
 
