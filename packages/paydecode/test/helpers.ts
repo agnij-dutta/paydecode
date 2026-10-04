@@ -26,8 +26,9 @@ export function dec(input: string, now: number) {
 }
 
 export const USDC_BASE_SEPOLIA = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
+// Anvil/Hardhat default account 0: a publicly known development key (never holds real funds).
+// AP2's x402 sample uses it as its default user, so the bundle fixture is reproducible.
 export const ANVIL_0 = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" as const;
-export const ANVIL_1 = "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d" as const;
 
 export const TWA_TYPES = {
   TransferWithAuthorization: [

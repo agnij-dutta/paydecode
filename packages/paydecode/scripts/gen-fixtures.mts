@@ -10,6 +10,7 @@ const fx = JSON.parse(readFileSync(new URL("fixtures.json", here), "utf8"));
 // AP2 v0.2 sample `x402_credentials_provider_mcp` bundle, reproduced with the
 // sample's own defaults (Anvil account 0 as the user, Anvil account 1 as the
 // merchant, Base Sepolia USDC) and its EIP-712 domain name "USD Coin".
+// Publicly known Anvil/Hardhat development key, the AP2 sample's default user. Never holds real funds.
 const ANVIL_0 = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80";
 const MERCHANT = "0x70997970C51812dc3A010C7d01b50e0d17dc79C8";
 const USDC_BASE_SEPOLIA = "0x036CbD53842c5426634e7929541eC2318f3dCF7e";
