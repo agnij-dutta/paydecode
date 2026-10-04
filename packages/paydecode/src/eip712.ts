@@ -176,6 +176,49 @@ export function recoverAddress(digest: Uint8Array, signature: string): string | 
   }
 }
 
+/**
+ * Fast repeated recovery for ONE signature against MANY digests (domain search).
+ * Q = r^-1 * (s*R - e*G): s*R/r is computed once, so each digest costs a single
+ * fixed-base multiplication instead of a full public key recovery.
+ */
+export function makeRecoverer(signature: string): ((digest: Uint8Array) => string | null) | null {
+  try {
+    const sig = hexToBytes(signature.startsWith("0x") ? signature : "0x" + signature);
+    let rs: Uint8Array;
+    let v: number;
+    if (sig.length === 65) {
+      rs = sig.slice(0, 64);
+      v = sig[64] >= 27 ? sig[64] - 27 : sig[64];
+    } else if (sig.length === 64) {
+      rs = sig.slice();
+      v = rs[32] >> 7;
+      rs[32] &= 0x7f;
+    } else return null;
+    if (v > 1) return null;
+    const P = secp256k1.Point;
+    const Fn = P.Fn;
+    const r = BigInt(bytesToHex(rs.slice(0, 32)));
+    const s = BigInt(bytesToHex(rs.slice(32)));
+    if (r === 0n || s === 0n || r >= Fn.ORDER || s >= Fn.ORDER) return null;
+    const R = P.fromBytes(concatBytes([new Uint8Array([2 + v]), rs.slice(0, 32)]));
+    const rInv = Fn.inv(r);
+    const sR = R.multiplyUnsafe(Fn.mul(s, rInv));
+    return (digest: Uint8Array) => {
+      try {
+        const e = Fn.create(BigInt(bytesToHex(digest)));
+        const eG = e === 0n ? P.ZERO : P.BASE.multiplyUnsafe(Fn.mul(e, rInv));
+        const Q = sR.subtract(eG);
+        const pub = Q.toBytes(false);
+        return checksumAddress(bytesToHex(keccak_256(pub.slice(1)).slice(-20)));
+      } catch {
+        return null;
+      }
+    };
+  } catch {
+    return null;
+  }
+}
+
 export const isEvmAddress = (s: unknown): s is string => typeof s === "string" && /^0x[0-9a-fA-F]{40}$/.test(s);
 
 export const sameAddress = (a: unknown, b: unknown): boolean =>

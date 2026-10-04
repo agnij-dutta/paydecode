@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { hashTypedData, getAddress, recoverTypedDataAddress, keccak256, toHex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { typedDataDigest, typedDataHash, recoverAddress, checksumAddress, encodeType, keccakUtf8 } from "../src/eip712.js";
+import { typedDataDigest, typedDataHash, recoverAddress, checksumAddress, encodeType, keccakUtf8, makeRecoverer } from "../src/eip712.js";
 import { ANVIL_0, TWA_TYPES, USDC_BASE_SEPOLIA } from "./helpers.js";
 
 const hex = (b: Uint8Array) => "0x" + Buffer.from(b).toString("hex");
@@ -120,5 +120,16 @@ describe("eip712 vs viem", () => {
 
   it("keccakUtf8 matches viem keccak256(toHex(str))", () => {
     expect(keccakUtf8("hello~~world")).toBe(keccak256(toHex("hello~~world")));
+  });
+
+  it("makeRecoverer (fast multi-digest path used by the domain search) agrees with full recovery", async () => {
+    const acct = privateKeyToAccount(ANVIL_0);
+    const sig = await acct.signTypedData({ domain, types: TWA_TYPES, primaryType: "TransferWithAuthorization", message });
+    const rec = makeRecoverer(sig)!;
+    for (const name of ["USDC", "USD Coin", "x"]) {
+      const dg = typedDataDigest({ ...domain, name }, "TransferWithAuthorization", [...TWA_TYPES.TransferWithAuthorization], { ...message });
+      expect(rec(dg)).toBe(recoverAddress(dg, sig));
+    }
+    expect(makeRecoverer("0x1234")).toBeNull();
   });
 });

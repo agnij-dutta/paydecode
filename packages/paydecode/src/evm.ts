@@ -9,7 +9,12 @@ import {
   isEvmAddress,
   sameAddress,
   checksumAddress,
+  makeRecoverer,
+  hashStructTyped,
+  domainSeparator,
+  concatBytes,
 } from "./eip712.js";
+import { keccak_256 } from "@noble/hashes/sha3.js";
 import {
   networkInfo,
   chainName,
@@ -116,17 +121,20 @@ function searchDomains(
   from: string,
 ): DomainHit | undefined {
   const seen = new Set<string>();
+  const recover = makeRecoverer(signature);
+  if (!recover) return undefined;
+  const structHash = hashStructTyped(primary, types, message);
   for (const d of candidates) {
     const key = JSON.stringify([d.name, d.version, String(d.chainId), String(d.verifyingContract).toLowerCase()]);
     if (seen.has(key)) continue;
     seen.add(key);
     let digest: Uint8Array;
     try {
-      digest = typedDataHash(d, types, primary, message);
+      digest = keccak_256(concatBytes([new Uint8Array([0x19, 0x01]), domainSeparator(d), structHash]));
     } catch {
       continue;
     }
-    const rec = recoverAddress(digest, signature);
+    const rec = recover(digest);
     if (rec && sameAddress(rec, from)) {
       return { domain: d, token: findEvmToken(Number(d.chainId), d.verifyingContract), recovered: rec };
     }
@@ -142,12 +150,12 @@ function domainCandidates(chainId: number | undefined, asset: string | undefined
   for (const n of ["USD Coin", "USDC"]) names.add(n);
   for (const v of ["2", "1"]) versions.add(v);
   const out: Domain[] = [];
-  const pushToken = (cid: number, addr: string, tk?: EvmToken) => {
-    const ns = new Set(names);
-    const vs = new Set(versions);
+  const pushToken = (cid: number, addr: string, tk?: EvmToken, narrow = false) => {
+    const ns = new Set(narrow ? ["USD Coin", "USDC"] : names);
+    const vs = new Set(narrow ? [] : versions);
     if (tk) {
       ns.add(tk.name);
-      ns.add(tk.symbol);
+      if (!narrow) ns.add(tk.symbol);
       vs.add(tk.version);
     }
     for (const name of ns) for (const version of vs) out.push({ name, version, chainId: cid, verifyingContract: addr });
@@ -156,9 +164,9 @@ function domainCandidates(chainId: number | undefined, asset: string | undefined
   if (chainId !== undefined && asset) pushToken(chainId, asset, findEvmToken(chainId, asset));
   // 2. same asset on other chains, then same chain other tokens
   if (asset) for (const tk of tokensAtAddress(asset)) pushToken(tk.chainId, tk.address, tk);
-  if (chainId !== undefined) for (const tk of EVM_TOKENS.filter((x) => x.chainId === chainId)) pushToken(tk.chainId, tk.address, tk);
+  if (chainId !== undefined) for (const tk of EVM_TOKENS.filter((x) => x.chainId === chainId)) pushToken(tk.chainId, tk.address, tk, true);
   // 3. everything we know
-  for (const tk of EVM_TOKENS) pushToken(tk.chainId, tk.address, tk);
+  for (const tk of EVM_TOKENS) pushToken(tk.chainId, tk.address, tk, true);
   return out;
 }
 
