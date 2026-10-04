@@ -228,7 +228,10 @@ button {
   border: 1px solid var(--line);
   background: var(--panel);
   color: var(--ink-2);
-  transition: border-color 120ms, color 120ms, background 120ms;
+  transition:
+    border-color 120ms,
+    color 120ms,
+    background 120ms;
 }
 .example:hover {
   border-color: var(--line-strong);
@@ -407,13 +410,29 @@ button {
   color: transparent;
 }
 
-.seg-0 { color: var(--tone-0); }
-.seg-1 { color: var(--tone-1); }
-.seg-2 { color: var(--tone-2); }
-.seg-3 { color: var(--tone-3); }
-.seg-name { color: var(--accent); font-weight: 600; }
-.seg-sep { color: var(--muted); font-weight: 600; }
-.seg-plain { color: var(--ink); }
+.seg-0 {
+  color: var(--tone-0);
+}
+.seg-1 {
+  color: var(--tone-1);
+}
+.seg-2 {
+  color: var(--tone-2);
+}
+.seg-3 {
+  color: var(--tone-3);
+}
+.seg-name {
+  color: var(--accent);
+  font-weight: 600;
+}
+.seg-sep {
+  color: var(--muted);
+  font-weight: 600;
+}
+.seg-plain {
+  color: var(--ink);
+}
 
 .legend {
   display: flex;
@@ -441,10 +460,18 @@ button {
   font-family: var(--mono);
 }
 
-.tone-0 { --t: var(--tone-0); }
-.tone-1 { --t: var(--tone-1); }
-.tone-2 { --t: var(--tone-2); }
-.tone-3 { --t: var(--tone-3); }
+.tone-0 {
+  --t: var(--tone-0);
+}
+.tone-1 {
+  --t: var(--tone-1);
+}
+.tone-2 {
+  --t: var(--tone-2);
+}
+.tone-3 {
+  --t: var(--tone-3);
+}
 
 .url-ctl {
   display: flex;
@@ -568,9 +595,15 @@ button {
   align-items: center;
   gap: 6px;
 }
-.tally-item.lvl-danger { color: var(--danger); }
-.tally-item.lvl-warn { color: var(--warn); }
-.tally-item.lvl-ok { color: var(--ok); }
+.tally-item.lvl-danger {
+  color: var(--danger);
+}
+.tally-item.lvl-warn {
+  color: var(--warn);
+}
+.tally-item.lvl-ok {
+  color: var(--ok);
+}
 
 .flags {
   list-style: none;
@@ -591,17 +624,31 @@ button {
   background: var(--b);
   font-size: 14.5px;
 }
-.flag.lvl-danger { --c: var(--danger); --b: var(--danger-bg); }
-.flag.lvl-warn { --c: var(--warn); --b: var(--warn-bg); }
-.flag.lvl-info { --c: var(--line-strong); --b: var(--info-bg); }
-.flag.lvl-ok { --c: var(--ok); --b: var(--ok-bg); }
+.flag.lvl-danger {
+  --c: var(--danger);
+  --b: var(--danger-bg);
+}
+.flag.lvl-warn {
+  --c: var(--warn);
+  --b: var(--warn-bg);
+}
+.flag.lvl-info {
+  --c: var(--line-strong);
+  --b: var(--info-bg);
+}
+.flag.lvl-ok {
+  --c: var(--ok);
+  --b: var(--ok-bg);
+}
 
 .flag-level {
   font-size: 12.5px;
   font-weight: 600;
   color: var(--c);
 }
-.flag.lvl-info .flag-level { color: var(--info); }
+.flag.lvl-info .flag-level {
+  color: var(--info);
+}
 .flag-msg {
   color: var(--ink);
 }
@@ -722,10 +769,21 @@ button {
   padding: 0 7px;
   border-radius: 5px;
 }
-.gloss-past { color: var(--muted); }
-.gloss-future { color: var(--ok); background: var(--ok-bg); }
-.gloss-expired { color: var(--danger); background: var(--danger-bg); }
-.gloss-pending { color: var(--warn); background: var(--warn-bg); }
+.gloss-past {
+  color: var(--muted);
+}
+.gloss-future {
+  color: var(--ok);
+  background: var(--ok-bg);
+}
+.gloss-expired {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+.gloss-pending {
+  color: var(--warn);
+  background: var(--warn-bg);
+}
 
 .copyable {
   display: inline-flex;
@@ -845,10 +903,18 @@ button {
   overflow: auto;
   max-height: 520px;
 }
-.j-key { color: var(--accent); }
-.j-str { color: var(--ink); }
-.j-num { color: var(--tone-3); }
-.j-lit { color: var(--tone-1); }
+.j-key {
+  color: var(--accent);
+}
+.j-str {
+  color: var(--ink);
+}
+.j-num {
+  color: var(--tone-3);
+}
+.j-lit {
+  color: var(--tone-1);
+}
 
 /* ---------- static explainer + footer (in index.html, visible to crawlers) ---------- */
 

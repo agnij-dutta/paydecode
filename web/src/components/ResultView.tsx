@@ -1,4 +1,4 @@
-import type { Decoded, Flag, FlagLevel, Result } from "../lib/decoder";
+import type { Flag, FlagLevel, Result } from "../lib/decoder";
 import { findNetwork, type NetworkInfo } from "../lib/networks";
 import { toneForHop, toneForSection } from "../lib/segments";
 import { FieldRow } from "./FieldRow";
@@ -7,7 +7,7 @@ import { RawJson } from "./RawJson";
 const ORDER: Record<FlagLevel, number> = { danger: 0, warn: 1, info: 2, ok: 3 };
 const LEVEL_LABEL: Record<FlagLevel, string> = { danger: "Danger", warn: "Warning", info: "Note", ok: "Check passed" };
 
-export function sortFlags(flags: Flag[]) {
+function sortFlags(flags: Flag[]) {
   return [...flags].sort((a, b) => ORDER[a.level] - ORDER[b.level]);
 }
 
@@ -17,7 +17,15 @@ const BAD = /(reject|expired|invalid|will not|won't|revert|fail|mismatch|exceeds
 
 /** Set amounts, addresses and hashes inside a sentence in the data face. */
 function withData(text: string) {
-  return text.split(DATA).map((p, i) => (i % 2 === 1 ? <span key={i} className="summary-data">{p}</span> : p));
+  return text.split(DATA).map((p, i) =>
+    i % 2 === 1 ? (
+      <span key={i} className="summary-data">
+        {p}
+      </span>
+    ) : (
+      p
+    ),
+  );
 }
 
 /** Lead sentence large; the rest smaller, with failure sentences in the danger color. */
@@ -91,7 +99,7 @@ interface Props {
 export function ResultView({ result, now, depth = 0, tone = null, inheritedNet = null, chainMode = false }: Props) {
   const values = result.sections.flatMap((s) => s.fields.map((f) => f.value));
   const net = findNetwork(values, result.raw) ?? inheritedNet;
-  const children = "children" in result ? ((result as Decoded).children ?? []) : [];
+  const children = "children" in result ? (result.children ?? []) : [];
   const nested = depth > 0;
 
   return (
@@ -123,14 +131,7 @@ export function ResultView({ result, now, depth = 0, tone = null, inheritedNet =
       {children.length > 0 && (
         <div className="children">
           {children.map((c, i) => (
-            <ResultView
-              key={i}
-              result={c}
-              now={now}
-              depth={depth + 1}
-              tone={chainMode && depth === 0 ? i % 4 : null}
-              inheritedNet={net}
-            />
+            <ResultView key={i} result={c} now={now} depth={depth + 1} tone={chainMode && depth === 0 ? i % 4 : null} inheritedNet={net} />
           ))}
         </div>
       )}

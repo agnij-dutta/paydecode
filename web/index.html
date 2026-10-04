@@ -64,49 +64,47 @@
     <section class="explainer" id="about" aria-labelledby="about-title">
       <h2 id="about-title">What paydecode reads</h2>
       <p class="explainer-lede">
-        AI agents now pay for APIs and checkouts on their own. The artifacts that carry those payments are base64 headers,
-        signed typed data and selectively disclosed JWTs. paydecode turns each one into a sentence a human can check, then
-        flags what would make it fail or overspend.
+        AI agents now pay for APIs and checkouts on their own. The artifacts that carry those payments are base64 headers, signed typed data
+        and selectively disclosed JWTs. paydecode turns each one into a sentence a human can check, then flags what would make it fail or
+        overspend.
       </p>
       <div class="explainer-grid">
         <article>
           <h3>x402</h3>
           <p>
-            An HTTP payment protocol built on status code 402. The server answers with a <code>PAYMENT-REQUIRED</code> header
-            (v1: a JSON body) listing what it accepts: network, asset, amount, recipient and a timeout. The client retries with a
-            signed <code>PAYMENT-SIGNATURE</code> header (v1: <code>X-PAYMENT</code>), and the server returns a settlement
-            receipt in <code>PAYMENT-RESPONSE</code>. All three are base64 JSON.
+            An HTTP payment protocol built on status code 402. The server answers with a <code>PAYMENT-REQUIRED</code> header (v1: a JSON
+            body) listing what it accepts: network, asset, amount, recipient and a timeout. The client retries with a signed
+            <code>PAYMENT-SIGNATURE</code> header (v1: <code>X-PAYMENT</code>), and the server returns a settlement receipt in
+            <code>PAYMENT-RESPONSE</code>. All three are base64 JSON.
           </p>
         </article>
         <article>
           <h3>EIP-3009 and Permit2</h3>
           <p>
-            On EVM chains an x402 payment is usually a <code>TransferWithAuthorization</code> signed over an EIP-712 domain:
-            token name, version, chain id and contract. If the domain name is wrong (for example "USD Coin" where the token says
-            "USDC"), the signature recovers to a different address and settlement fails. paydecode checks the domain against
-            the known USDC deployments.
+            On EVM chains an x402 payment is usually a <code>TransferWithAuthorization</code> signed over an EIP-712 domain: token name,
+            version, chain id and contract. If the domain name is wrong (for example "USD Coin" where the token says "USDC"), the signature
+            recovers to a different address and settlement fails. paydecode checks the domain against the known USDC deployments.
           </p>
         </article>
         <article>
           <h3>AP2</h3>
           <p>
-            The Agent Payments Protocol expresses what a user lets an agent buy as mandates. Version 0.2 encodes them as SD-JWTs
-            and joins delegation hops with <code>~~</code>: an open mandate sets limits such as a spend cap or allowed payees,
-            and a closed mandate names the exact payment. paydecode shows each hop and whether the closed mandate stays inside
-            the open one.
+            The Agent Payments Protocol expresses what a user lets an agent buy as mandates. Version 0.2 encodes them as SD-JWTs and joins
+            delegation hops with <code>~~</code>: an open mandate sets limits such as a spend cap or allowed payees, and a closed mandate
+            names the exact payment. paydecode shows each hop and whether the closed mandate stays inside the open one.
           </p>
         </article>
         <article>
           <h3>Solana payments</h3>
           <p>
-            x402 on Solana carries a partially signed versioned transaction. paydecode lists its instructions, the token
-            transfer, compute budget and fee payer, so you can see what the facilitator is being asked to co-sign.
+            x402 on Solana carries a partially signed versioned transaction. paydecode lists its instructions, the token transfer, compute
+            budget and fee payer, so you can see what the facilitator is being asked to co-sign.
           </p>
         </article>
       </div>
       <p class="explainer-privacy">
-        Everything runs in your browser. Input is decoded by JavaScript on this page, never sent to a server. Shared links keep
-        the input in the URL fragment, which browsers do not transmit, and you can turn that off.
+        Everything runs in your browser. Input is decoded by JavaScript on this page, never sent to a server. Shared links keep the input in
+        the URL fragment, which browsers do not transmit, and you can turn that off.
       </p>
     </section>
 

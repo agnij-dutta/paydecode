@@ -78,7 +78,7 @@ export function safeJson(value: unknown): string {
   try {
     return JSON.stringify(
       value,
-      (_k, v) => {
+      (_key, v: unknown) => {
         if (typeof v === "bigint") return v.toString();
         if (v instanceof Uint8Array) return "0x" + Array.from(v, (b) => b.toString(16).padStart(2, "0")).join("");
         return v;

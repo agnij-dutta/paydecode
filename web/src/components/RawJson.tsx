@@ -17,8 +17,18 @@ function highlight(json: string) {
         </span>,
       );
       if (m[2]) out.push(m[2]);
-    } else if (m[3]) out.push(<span key={i++} className="j-lit">{m[3]}</span>);
-    else out.push(<span key={i++} className="j-num">{m[4]}</span>);
+    } else if (m[3])
+      out.push(
+        <span key={i++} className="j-lit">
+          {m[3]}
+        </span>,
+      );
+    else
+      out.push(
+        <span key={i++} className="j-num">
+          {m[4]}
+        </span>,
+      );
     last = idx + m[0].length;
   }
   out.push(json.slice(last));

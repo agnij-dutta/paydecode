@@ -39,9 +39,15 @@ function b64decode(s: string) {
   return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
 }
 
+/** The fields of an x402 v2 PaymentPayload this demo reads or rewrites. */
+interface PaymentPayloadV2 {
+  accepted: { payTo: string; amount: string; asset: string; extra: { name: string; version: string } };
+  payload?: unknown;
+}
+
 export function buildBrokenExample(nowSeconds = Math.floor(Date.now() / 1000)): string {
   const base = EXAMPLES.find((e) => e.id === "x402-v2-payment")!;
-  const p = JSON.parse(b64decode(base.value));
+  const p = JSON.parse(b64decode(base.value)) as PaymentPayloadV2;
   p.accepted.extra.name = "USD Coin";
 
   const pub = secp256k1.getPublicKey(DEMO_KEY, false);

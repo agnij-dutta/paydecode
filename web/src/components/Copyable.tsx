@@ -9,26 +9,28 @@ interface Props {
 
 /** Click to copy the full value; shows the truncated display. */
 export function Copyable({ value, display, title, className = "" }: Props) {
-  const [copied, setCopied] = useState(false);
+  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setState("copied");
+    } catch {
+      // Clipboard can be blocked (insecure context, permissions); say so instead of pretending it worked.
+      setState("failed");
+    }
+    window.setTimeout(() => setState("idle"), 1200);
+  };
   return (
     <button
       type="button"
       className={`copyable ${className}`}
       title={title ?? `Copy ${value}`}
       aria-label={`Copy ${value}`}
-      onClick={async () => {
-        try {
-          await navigator.clipboard.writeText(value);
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1200);
-        } catch {
-          /* clipboard unavailable */
-        }
-      }}
+      onClick={() => void copy()}
     >
       <span>{display}</span>
       <span className="copy-hint" aria-live="polite">
-        {copied ? "copied" : "copy"}
+        {state === "copied" ? "copied" : state === "failed" ? "copy failed" : "copy"}
       </span>
     </button>
   );

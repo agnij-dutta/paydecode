@@ -82,7 +82,7 @@ function exampleText(id: string) {
 export default function App() {
   const [input, setInput] = useState<string>(() => readHash());
   const [urlSync, setUrlSync] = useState<boolean>(() => load(PREF_KEY) !== "off");
-  const [linkCopied, setLinkCopied] = useState(false);
+  const [linkState, setLinkState] = useState<"idle" | "copied" | "failed">("idle");
   const [now, setNow] = useState(() => Date.now() / 1000);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const { theme, cycle } = useTheme();
@@ -90,7 +90,7 @@ export default function App() {
   const [api, setApi] = useState<DecoderApi | null>(decoderApi);
 
   useEffect(() => {
-    if (!api) decoderReady.then(setApi);
+    if (!api) void decoderReady.then(setApi);
   }, [api]);
 
   // Keep relative times honest while the page is open.
@@ -159,11 +159,12 @@ export default function App() {
     writeHash(input.trim());
     try {
       await navigator.clipboard.writeText(window.location.href);
-      setLinkCopied(true);
-      window.setTimeout(() => setLinkCopied(false), 1400);
+      setLinkState("copied");
     } catch {
-      /* clipboard unavailable */
+      // Clipboard blocked: the URL bar already holds the link, so point there.
+      setLinkState("failed");
     }
+    window.setTimeout(() => setLinkState("idle"), 1400);
   };
 
   return (
@@ -248,8 +249,8 @@ export default function App() {
                 <span>Keep input in URL</span>
               </label>
               {urlSync && input.trim() && (
-                <button type="button" className="ghost small" onClick={copyLink}>
-                  {linkCopied ? "Link copied" : "Copy link"}
+                <button type="button" className="ghost small" onClick={() => void copyLink()}>
+                  {linkState === "copied" ? "Link copied" : linkState === "failed" ? "Copy blocked, use the address bar" : "Copy link"}
                 </button>
               )}
             </div>
@@ -261,12 +262,12 @@ export default function App() {
             <div className="empty">
               <p className="empty-title">Nothing decoded yet.</p>
               <p>
-                Paste a header value, a full header line, a JWT or JSON on the left, or pick an example above. The one marked
-                Broken shows how a single wrong EIP-712 domain name makes a USDC payment fail to verify.
+                Paste a header value, a full header line, a JWT or JSON on the left, or pick an example above. The one marked Broken shows
+                how a single wrong EIP-712 domain name makes a USDC payment fail to verify.
               </p>
               <p className="empty-formats">
-                Reads x402 v1 and v2 (challenges, payments, receipts), AP2 mandates and SD-JWT delegation chains, EIP-3009
-                authorizations, Permit2 witnesses and Solana payment transactions.
+                Reads x402 v1 and v2 (challenges, payments, receipts), AP2 mandates and SD-JWT delegation chains, EIP-3009 authorizations,
+                Permit2 witnesses and Solana payment transactions.
               </p>
             </div>
           ) : result.ok ? (
