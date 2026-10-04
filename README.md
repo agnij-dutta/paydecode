@@ -49,8 +49,9 @@ npm test
 # decode the demo artifact above
 npm run paydecode -- --now 1777343000 packages/paydecode/test/fixtures/ap2-x402-bundle.json
 
-# decode anything: a header, JSON, an SD-JWT chain, a base64 Solana transaction
-npm run paydecode -- "X-PAYMENT: eyJ4NDAyVmVyc2lvbiI6MSwic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiYmFzZS1zZXBvbGlh..."
+# a real x402 v1 X-PAYMENT header (from the x402 repo); anything else works too:
+# JSON, an SD-JWT chain, a base64 Solana transaction, a whole HTTP response
+npm run paydecode -- --now 1740672100 "X-PAYMENT: eyJ4NDAyVmVyc2lvbiI6MSwic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiYmFzZS1zZXBvbGlhIiwicGF5bG9hZCI6eyJzaWduYXR1cmUiOiIweDJkNmE3NTg4ZDZhY2NhNTA1Y2JmMGQ5YTRhMjI3ZTBjNTJjNmMzNDAwOGM4ZTg5ODZhMTI4MzI1OTc2NDE3MzYwOGEyY2U2NDk2NjQyZTM3N2Q2ZGE4ZGJiZjU4MzZlOWJkMTUwOTJmOWVjYWIwNWRlZDNkNjI5M2FmMTQ4YjU3MWMiLCJhdXRob3JpemF0aW9uIjp7ImZyb20iOiIweDg1N2IwNjUxOUU5MWUzQTU0NTM4NzkxYkRiYjBFMjIzNzNlMzZiNjYiLCJ0byI6IjB4MjA5NjkzQmM2YWZjMEM1MzI4YkEzNkZhRjAzQzUxNEVGMzEyMjg3QyIsInZhbHVlIjoiMTAwMDAiLCJ2YWxpZEFmdGVyIjoiMTc0MDY3MjA4OSIsInZhbGlkQmVmb3JlIjoiMTc0MDY3MjE1NCIsIm5vbmNlIjoiMHhmMzc0NjYxM2MyZDkyMGI1ZmRhYmMwODU2ZjJhZWIyZDRmODhlZTYwMzdiOGNjNWQwNGE3MWE0NDYyZjEzNDgwIn19fQ=="
 
 # the web app (paste box, two-pane explanation), at http://localhost:5173
 npm run dev

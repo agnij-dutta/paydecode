@@ -51,7 +51,7 @@ export function unrecognized(input: string, header?: string): Unrecognized {
   } else if (looksLikeJwt(text) || looksLikeSdJwt(text)) {
     summary = "Looks like a JWT or SD-JWT, but its segments don't decode to JSON.";
   } else {
-    summary = `Not JSON, base64, a JWT/SD-JWT, or a known payment header${text.length > 0 ? ` (starts with "${short(text, 16, 0).replace(/…$/, "")}")` : ""}.`;
+    summary = `Not JSON, base64, a JWT/SD-JWT, or a known payment header${text.length > 0 ? ` (starts with "${short(text, 16, 0)}")` : ""}.`;
   }
   if (header) flags.push(flag("info", "HEADER_SEEN", `Pasted with header '${header}'.`));
   return { kind: "unknown", title: "Unrecognized input", summary, sections, flags, raw };

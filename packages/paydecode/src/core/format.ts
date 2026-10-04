@@ -20,7 +20,8 @@ export function asText(value: unknown, fallback: unknown = ""): string {
 export function short(s: unknown, head = 6, tail = 4): string {
   const v = asText(s, "");
   if (v.length <= head + tail + 1) return v;
-  return `${v.slice(0, head)}…${v.slice(-tail)}`;
+  // slice(-0) would return the whole string, so a zero tail must be handled explicitly.
+  return `${v.slice(0, head)}…${tail > 0 ? v.slice(-tail) : ""}`;
 }
 
 export function groupThousands(int: string): string {
