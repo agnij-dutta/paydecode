@@ -29,10 +29,11 @@ jobs:
         run: npm run format:check
       - name: Typecheck (library + web)
         run: npm run typecheck
-      - name: Test (library)
-        run: npm test
+      # Build before testing: the CLI tests run against dist/cli.js and skip when it is missing.
       - name: Build (library + web)
         run: npm run build
+      - name: Test (library)
+        run: npm test
       - name: CLI smoke test
         run: |
           out=$(node packages/paydecode/dist/cli.js --now 1777343000 --no-color packages/paydecode/test/fixtures/ap2-x402-bundle.json)
