@@ -1,0 +1,32 @@
+{
+  "name": "paydecode-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "paydecode: jwt.io for agent payments. Library, CLI and web app.",
+  "license": "MIT",
+  "author": "Agnij Dutta (https://x.com/0xholmesdev)",
+  "homepage": "https://github.com/agnij-dutta/paydecode#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/agnij-dutta/paydecode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/agnij-dutta/paydecode/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "packages/*",
+    "web"
+  ],
+  "scripts": {
+    "build": "npm run build -w paydecode && npm run build -w web",
+    "test": "npm test -w paydecode",
+    "lint": "npm run lint -w paydecode && npm run lint -w web",
+    "typecheck": "npm run typecheck -w paydecode && npm run typecheck -w web",
+    "format:check": "npm run format:check -w paydecode && npm run format:check -w web",
+    "dev": "npm run dev -w web",
+    "paydecode": "node packages/paydecode/dist/cli.js"
+  }
+}
