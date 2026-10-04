@@ -32,6 +32,11 @@ export const TRANSFER_WITH_AUTHORIZATION: TypeMap = {
   ],
 };
 
+export const UINT256_MAX = (1n << 256n) - 1n;
+
+/** secp256k1 n / 2: signatures with s above this are the malleable twin (EIP-2). */
+export const SECP256K1_HALF_N = 0x7fffffffffffffffffffffffffffffff5d576e7357a4501ddfe92f46681b20a0n;
+
 export interface DomainHit {
   domain: Domain;
   token?: EvmToken;
@@ -132,7 +137,9 @@ export function verifyEip3009Signature(auth: Record<string, unknown>, signature:
   const bad: string[] = [];
   if (!isEvmAddress(auth.to)) bad.push(`to (${asText(auth.to, "missing")}) is not an address`);
   for (const k of ["value", "validAfter", "validBefore"]) {
-    if (!/^\d+$/.test(asText(auth[k], ""))) bad.push(`${k} (${asText(auth[k], "missing")}) is not a non-negative integer`);
+    const v = asText(auth[k], "");
+    if (!/^\d+$/.test(v)) bad.push(`${k} (${short(asText(auth[k], "missing"), 12, 4)}) is not a non-negative integer`);
+    else if (BigInt(v) > UINT256_MAX) bad.push(`${k} (${short(v, 12, 4)}) does not fit in a uint256`);
   }
   if (!/^(0x)?[0-9a-fA-F]{1,64}$/.test(asText(auth.nonce, "")))
     bad.push(`nonce (${short(asText(auth.nonce, "missing"), 10, 4)}) is not bytes32 hex`);
@@ -156,6 +163,18 @@ export function verifyEip3009Signature(auth: Record<string, unknown>, signature:
       ),
     );
     return { flags, phrase: "Signature malformed or from a smart wallet (not checked).", fields };
+  }
+
+  // USDC's ECRecover (and OpenZeppelin ECDSA) reject the malleable upper-half s, even though the
+  // math recovers the same signer. https://github.com/circlefin/stablecoin-evm/blob/master/contracts/util/ECRecover.sol
+  if (sigBytes === 130 && BigInt("0x" + sig.slice(66, 130)) > SECP256K1_HALF_N) {
+    flags.push(
+      flag(
+        "warn",
+        "SIG_HIGH_S",
+        "Signature uses a high s value (the malleable form). It recovers the signer, but USDC's ECRecover and OpenZeppelin's ECDSA revert on it unless the facilitator normalizes s first.",
+      ),
+    );
   }
 
   const claimed: Domain | undefined =
@@ -313,7 +332,8 @@ export function verifyEip3009Signature(auth: Record<string, unknown>, signature:
     return { flags, phrase: "Signature is for a different chain or token.", fields, hit };
   }
 
-  const ref = claimed ?? onchain;
+  // Report recovery under the token's real domain when we know it, since the message names that domain.
+  const ref = onchain ?? claimed;
   const rec = ref ? tryD(ref) : null;
   if (rec) fields.push(field("Recovered signer", rec, "address", `does NOT match from ${short(from)}`));
   flags.push(
@@ -321,7 +341,7 @@ export function verifyEip3009Signature(auth: Record<string, unknown>, signature:
       "danger",
       "SIG_INVALID",
       ref
-        ? `Signature does not match 'from'. Under ${tl}'s domain it recovers to ${short(rec)}, not ${short(from)}, and no other known USDC domain fits either. The authorization fields (to, value, validity, nonce) were changed after signing, or a different key signed it.`
+        ? `Signature does not match 'from'. Under ${onchain ? `${tl}'s on-chain domain` : `the domain in extra (${domainText(ref)})`} it recovers to ${rec ? short(rec) : "no valid key"}, not ${short(from)}, and no other known token domain fits either. The authorization fields (to, value, validity, nonce) were changed after signing, or a different key signed it.`
         : `Signature does not recover to 'from' (${short(from)}) under any known token domain, and the artifact doesn't say which network/asset it is for, so it can't be pinned down further.`,
     ),
   );

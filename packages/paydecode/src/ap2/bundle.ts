@@ -67,16 +67,28 @@ export function decodeAp2X402Bundle(o: Obj, now: number): Decoded {
   if (closed && isRecord(closed.payment_amount)) {
     const pa = closed.payment_amount;
     const cur = asText(pa.currency, "").toUpperCase();
-    if (cur === "USD") {
+    const tk = analysis.token;
+    if (cur === "USD" && !tk) {
+      flags.push(
+        flag(
+          "warn",
+          "AP2_AMOUNT_UNCHECKED",
+          `The closed mandate pays ${formatMinor(pa.amount, pa.currency)}, but the EIP-3009 token isn't one paydecode knows, so its decimals (and the on-chain amount) can't be compared.`,
+        ),
+      );
+    } else if (cur === "USD" && tk) {
       try {
-        const expected = BigInt(asText(pa.amount)) * 10000n; // cents -> 6-decimal USDC
+        // Mandate amounts are cents; scale to the token's own decimals (6 for USDC, 18 for MegaUSD).
+        const scale = tk.decimals - 2;
+        const cents = BigInt(asText(pa.amount));
+        const expected = scale >= 0 ? cents * 10n ** BigInt(scale) : undefined;
         const v = BigInt(asText(auth.value, "0"));
-        if (v === expected)
+        if (expected !== undefined && v === expected)
           flags.push(
             flag(
               "ok",
               "AP2_AMOUNT_MATCHES",
-              `On-chain amount matches the closed mandate (${formatMinor(pa.amount, pa.currency)} as 6-decimal USDC).`,
+              `On-chain amount matches the closed mandate (${formatMinor(pa.amount, pa.currency)} as ${tk.decimals}-decimal ${tk.symbol}).`,
             ),
           );
         else
@@ -84,11 +96,17 @@ export function decodeAp2X402Bundle(o: Obj, now: number): Decoded {
             flag(
               "danger",
               "AP2_AMOUNT_MISMATCH",
-              `The EIP-3009 value (${asText(auth.value)} units) doesn't equal the closed mandate's ${formatMinor(pa.amount, pa.currency)} (${expected} units at 6 decimals).`,
+              `The EIP-3009 value (${asText(auth.value)} units) doesn't equal the closed mandate's ${formatMinor(pa.amount, pa.currency)}${expected !== undefined ? ` (${expected} units of ${tk.decimals}-decimal ${tk.symbol})` : ""}.`,
             ),
           );
       } catch {
-        /* ignore */
+        flags.push(
+          flag(
+            "warn",
+            "AP2_AMOUNT_UNCHECKED",
+            `Couldn't compare amounts: the mandate amount '${asText(pa.amount)}' or EIP-3009 value '${asText(auth.value)}' is not an integer.`,
+          ),
+        );
       }
     }
     const instr = isRecord(closed.payment_instrument) ? closed.payment_instrument : {};

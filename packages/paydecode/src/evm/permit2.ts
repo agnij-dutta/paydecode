@@ -2,7 +2,7 @@
 // spent through the x402 Permit2 proxy (0x4020...0001 exact, 0x4020...0002 upto).
 // Spec: https://github.com/x402-foundation/x402/tree/main/specs/schemes/exact
 import { isRecord } from "../core/encoding.js";
-import { asText, field, flag, formatDay, relative, section, short, timeField, toUnix } from "../core/format.js";
+import { asText, field, flag, formatDay, relative, section, short, timeField, toUnixSeconds } from "../core/format.js";
 import {
   EVM_TOKENS,
   PERMIT2_ADDRESS,
@@ -14,7 +14,7 @@ import {
 } from "../core/networks.js";
 import { checksumAddress, isEvmAddress, recoverAddress, sameAddress, typedDataHash } from "../crypto/eip712.js";
 import type { Domain, TypeMap } from "../crypto/eip712.js";
-import { amountFlags, amountText, assetFlags, hex0x, windowFlags } from "./context.js";
+import { PERMIT2_WINDOW, amountFlags, amountText, assetFlags, hex0x, isExpired, windowFlags } from "./context.js";
 import type { Analysis, PaymentContext } from "./context.js";
 import type { Field, Flag } from "../types.js";
 
@@ -56,8 +56,8 @@ export function analyzePermit2(payload: Record<string, unknown>, ctx: PaymentCon
   const tk = findEvmToken(chainId, token);
   const from = asText(p.from, "");
   const to = asText(witness.to, "");
-  const deadline = toUnix(p.deadline);
-  const validAfter = toUnix(witness.validAfter);
+  const deadline = toUnixSeconds(p.deadline);
+  const validAfter = toUnixSeconds(witness.validAfter);
   const isUpto = "facilitator" in witness || ctx.scheme === "upto";
   const expectedSpender = isUpto ? X402_UPTO_PERMIT2_PROXY : X402_EXACT_PERMIT2_PROXY;
   const amt = amountText(permitted.amount, tk, token);
@@ -143,7 +143,7 @@ export function analyzePermit2(payload: Record<string, unknown>, ctx: PaymentCon
   }
 
   // Window + amounts + recipient
-  flags.push(...windowFlags(validAfter, deadline, now, ctx));
+  flags.push(...windowFlags(validAfter, deadline, now, ctx, PERMIT2_WINDOW));
   flags.push(...amountFlags(permitted.amount, ctx, tk));
   flags.push(...assetFlags({ ...ctx, asset: token }, tk, chainId));
   if (ctx.asset && token && !sameAddress(ctx.asset, token)) {
@@ -181,7 +181,7 @@ export function analyzePermit2(payload: Record<string, unknown>, ctx: PaymentCon
     timeField("Deadline", deadline, now, p.deadline),
     field("Permit2 nonce", asText(p.nonce, ""), "code"),
   ];
-  const state = deadline !== undefined && deadline <= now ? ` (expired ${relative(deadline, now)})` : "";
+  const state = isExpired(deadline, now, PERMIT2_WINDOW) ? ` (expired ${relative(deadline!, now)})` : "";
   const summary = `Permit2 authorization for ${short(from)} to pay ${isUpto ? "up to " : ""}${amt}${net ? ` on ${net.name}` : ""} to ${short(to)} through ${sameAddress(p.spender, expectedSpender) ? "the x402 proxy" : `spender ${short(p.spender)}`}, valid until ${deadline !== undefined ? formatDay(deadline) : "an unstated deadline"}${state}. ${sigPhrase}`;
   return {
     sections: [section(`Permit2 PermitWitnessTransferFrom${isUpto ? " (upto)" : ""}`, fields), section("Signature", sigFields)],

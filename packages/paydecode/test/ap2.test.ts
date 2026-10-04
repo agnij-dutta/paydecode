@@ -3,7 +3,7 @@ import { p256 } from "@noble/curves/nist.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { privateKeyToAccount } from "viem/accounts";
 import { keccak256, toHex } from "viem";
-import { decode, parseChain, sdHash } from "../src/index.js";
+import { decode, parseChain, parseSdToken, sdHash, verifyEs256 } from "../src/index.js";
 import { FIX, AP2_NOW, readFixture, codes, flagOf, dec, ANVIL_0, TWA_TYPES, USDC_BASE_SEPOLIA } from "./helpers.js";
 
 const CHAIN: string = FIX.ap2_v02_open_plus_closed_payment_mandate_chain;
@@ -300,5 +300,99 @@ describe("structured UI hints", () => {
     const expires = hopSections[0].fields.find((f) => f.label === "Expires")!;
     expect(expires.kind).toBe("time");
     expect(expires.unixSeconds).toBe(1777345957);
+  });
+});
+
+describe("AP2 amount checks use the currency's minor unit and fail closed", () => {
+  const openWith = (constraints: object[]) => ({
+    vct: "mandate.payment.open.1",
+    constraints: [...constraints, { type: "payment.reference", conditional_transaction_id: "abc" }],
+    cnf: { jwk: jwkOf(agentKey) },
+    exp: AP2_NOW + 3600,
+  });
+  const closedIn = (amount: unknown, currency: string) => ({ ...closedMandate(0), payment_amount: { amount, currency } });
+  const violations = (d: ReturnType<typeof dec>) => d.flags.filter((f) => f.code === "MANDATE_CONSTRAINT_VIOLATION").map((f) => f.message);
+
+  it("a JPY budget is compared in yen, not as if yen had cents", () => {
+    const open = openWith([{ type: "payment.budget", max: 1000, currency: "JPY" }]);
+    expect(violations(dec(buildChain(open, closedIn(1500, "JPY")), AP2_NOW))).toEqual([
+      "Hop 2 breaks hop 1's constraints: this single payment (¥1,500 JPY) already exceeds the ¥1,000 JPY budget.",
+    ]);
+    expect(violations(dec(buildChain(open, closedIn(900, "JPY")), AP2_NOW))).toEqual([]);
+  });
+
+  it("a USD budget still scales cents to dollars", () => {
+    const open = openWith([{ type: "payment.budget", max: 100, currency: "USD" }]);
+    expect(violations(dec(buildChain(open, closedIn(10001, "USD")), AP2_NOW))).toHaveLength(1);
+    expect(violations(dec(buildChain(open, closedIn(10000, "USD")), AP2_NOW))).toEqual([]);
+  });
+
+  it("a non-numeric amount is a violation, never 'within constraints'", () => {
+    const d = dec(buildChain(openMandate(20000), closedIn("lots", "USD")), AP2_NOW);
+    expect(violations(d)[0]).toContain("payment amount 'lots' is not a number");
+    expect(codes(d)).not.toContain("MANDATE_WITHIN_CONSTRAINTS");
+  });
+
+  it("the bundle doesn't assume 6 decimals when the token can't be identified", () => {
+    const b = JSON.parse(readFixture("ap2-x402-bundle.json"));
+    b.eip_3009_payload.signature = "0x" + "11".repeat(65);
+    const d = dec(JSON.stringify(b), AP2_NOW);
+    expect(codes(d)).toContain("AP2_AMOUNT_UNCHECKED");
+    expect(codes(d)).not.toContain("AP2_AMOUNT_MATCHES");
+    expect(codes(d)).not.toContain("AP2_AMOUNT_MISMATCH");
+  });
+});
+
+describe("SD-JWT processing rules (RFC 9901 section 7.1) and ES256", () => {
+  const issue = (payload: object, discs: string[]) =>
+    `${sign({ alg: "ES256", typ: "example+sd-jwt" }, payload, rootKey)}~${discs.join("~")}~`;
+
+  it("a digest used twice is rejected", () => {
+    const d = disclose("x", "given_name");
+    const tok = parseSdToken(issue({ _sd: [d.digest, d.digest] }, [d.raw]))!;
+    expect(tok.problems).toContain(`digest ${d.digest.slice(0, 12)}… appears more than once`);
+  });
+
+  it("a disclosure can't silently overwrite a signed plaintext claim", () => {
+    const d = disclose({ amount: 999999, currency: "USD" }, "payment_amount");
+    const tok = parseSdToken(issue({ payment_amount: { amount: 100, currency: "USD" }, _sd: [d.digest] }, [d.raw]))!;
+    expect(tok.problems).toEqual(["disclosed claim 'payment_amount' collides with a claim already in the payload"]);
+    expect(tok.resolved.payment_amount).toEqual({ amount: 100, currency: "USD" });
+  });
+
+  it("problems surface as a danger flag and fail the chain summary", () => {
+    const m = disclose(closedMandate(100));
+    const dup = `${sign({ alg: "ES256", typ: "example+sd-jwt" }, { delegate_payload: [{ "...": m.digest }, { "...": m.digest }] }, rootKey)}~${m.raw}~`;
+    const d = dec(dup, AP2_NOW);
+    expect(flagOf(d, "SD_JWT_MALFORMED")?.level).toBe("danger");
+    expect(d.summary).toContain("check(s) FAILED");
+  });
+
+  it("well-formed tokens report no problems", () => {
+    for (const hop of parseChain(CHAIN)!) expect(hop.problems).toEqual([]);
+  });
+
+  it("ES256 accepts high-s (JWS doesn't mandate low-s) and rejects wrong keys, curves and tampering", () => {
+    const tok = parseSdToken(issue({ a: 1 }, []))!;
+    const jwk = jwkOf(rootKey);
+    expect(verifyEs256(tok.jwt, jwk)).toBe(true);
+    const n = p256.Point.Fn.ORDER;
+    const sig = tok.jwt.signature;
+    const s = BigInt("0x" + Buffer.from(sig.slice(32)).toString("hex"));
+    const flipped = new Uint8Array(sig);
+    flipped.set(Buffer.from((n - s).toString(16).padStart(64, "0"), "hex"), 32);
+    expect(verifyEs256({ ...tok.jwt, signature: flipped }, jwk)).toBe(true);
+    expect(verifyEs256(tok.jwt, jwkOf(agentKey))).toBe(false);
+    expect(verifyEs256(tok.jwt, { ...jwk, crv: "P-384" })).toBe(false);
+    expect(verifyEs256(tok.jwt, { ...jwk, x: jwk.y })).toBe(false);
+    expect(verifyEs256({ ...tok.jwt, signingInput: tok.jwt.signingInput + "x" }, jwk)).toBe(false);
+  });
+
+  it("sd_hash and disclosure digests are base64url(sha-256) of the exact ASCII string", () => {
+    expect(sdHash("abc~")).toBe(bu(sha256(new TextEncoder().encode("abc~"))));
+    // RFC 9901 section 5.1 example disclosure and its digest
+    expect(sdHash("WyJfMjZiYzRMVC1hYzZxMktJNmNCVzVlcyIsICJmYW1pbHlfbmFtZSIsICJNw7ZiaXVzIl0")).toBe(
+      "X9yH0Ajrdm1Oij4tWso9UzzKJvPoDxwmuEcO3XAdRC0",
+    );
   });
 });

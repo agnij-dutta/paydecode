@@ -1,10 +1,10 @@
 // x402 exact/EVM with assetTransferMethod "eip3009": TransferWithAuthorization payloads.
 // Spec: https://github.com/x402-foundation/x402/tree/main/specs/schemes/exact
 import { isRecord } from "../core/encoding.js";
-import { asText, duration, field, flag, formatDay, relative, section, short, timeField, toUnix } from "../core/format.js";
+import { asText, duration, field, flag, formatDay, relative, section, short, timeField, toUnixSeconds } from "../core/format.js";
 import { chainName, findEvmToken, networkInfo } from "../core/networks.js";
 import { isEvmAddress, sameAddress } from "../crypto/eip712.js";
-import { amountFlags, amountText, assetFlags, windowFlags } from "./context.js";
+import { EIP3009_WINDOW, amountFlags, amountText, assetFlags, isExpired, isNotYetValid, windowFlags } from "./context.js";
 import type { Analysis, PaymentContext } from "./context.js";
 import { verifyEip3009Signature } from "./domain.js";
 import type { Field, Flag } from "../types.js";
@@ -17,8 +17,8 @@ export function analyzeEip3009(payload: Record<string, unknown>, ctx: PaymentCon
   const tk = findEvmToken(chainId, ctx.asset);
   const flags: Flag[] = [];
 
-  const after = toUnix(auth.validAfter);
-  const before = toUnix(auth.validBefore);
+  const after = toUnixSeconds(auth.validAfter);
+  const before = toUnixSeconds(auth.validBefore);
   const from = asText(auth.from, "");
   const to = asText(auth.to, "");
 
@@ -40,7 +40,7 @@ export function analyzeEip3009(payload: Record<string, unknown>, ctx: PaymentCon
   const amt = amountText(auth.value, shownTk, ctx.asset);
 
   flags.push(...sig.flags);
-  flags.push(...windowFlags(after, before, now, ctx));
+  flags.push(...windowFlags(after, before, now, ctx, EIP3009_WINDOW));
   flags.push(...amountFlags(auth.value, ctx, shownTk));
   flags.push(...assetFlags(ctx, tk, chainId));
   if (ctx.payTo && isEvmAddress(ctx.payTo) && isEvmAddress(to)) {
@@ -85,12 +85,11 @@ export function analyzeEip3009(payload: Record<string, unknown>, ctx: PaymentCon
   if (after !== undefined && before !== undefined && after > 0) when = `valid for ${duration(before - after)} starting ${formatDay(after)}`;
   else if (before !== undefined) when = `valid until ${formatDay(before)}`;
   else when = "with no stated validity window";
-  const state =
-    before !== undefined && before <= now
-      ? ` (expired ${relative(before, now)})`
-      : after !== undefined && after > now
-        ? ` (not valid until ${relative(after, now)})`
-        : "";
+  const state = isExpired(before, now, EIP3009_WINDOW)
+    ? ` (expired ${relative(before!, now)})`
+    : isNotYetValid(after, now, EIP3009_WINDOW)
+      ? ` (not valid until ${relative(after!, now)})`
+      : "";
   const summary = `Authorizes ${short(from)} to pay ${amt}${shownNet ? ` on ${shownNet.replace(" (inferred from signature)", "")}` : ""} to ${short(to)}, ${when}${state}. ${sig.phrase}`;
 
   return {
@@ -102,6 +101,7 @@ export function analyzeEip3009(payload: Record<string, unknown>, ctx: PaymentCon
     summary,
     sigPhrase: sig.phrase,
     payer: from,
+    token: shownTk,
   };
 }
 

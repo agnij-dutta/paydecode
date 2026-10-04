@@ -3,10 +3,18 @@
 // Source: https://github.com/google-agentic-commerce/AP2/blob/main/code/sdk/python/ap2/sdk/constraints.py
 import { merchantName } from "./mandates.js";
 import { isRecord } from "../core/encoding.js";
-import { asText, formatMajor, formatMinor } from "../core/format.js";
+import { asText, currencyDecimals, formatMajor, formatMinor } from "../core/format.js";
 import { parseJwt } from "../crypto/sdjwt.js";
 
 type Obj = Record<string, unknown>;
+
+/** Number(), but only for finite numeric values: a non-numeric amount must fail a check, never pass it. */
+const num = (v: unknown): number | undefined => {
+  if (typeof v !== "number" && typeof v !== "string") return undefined;
+  if (typeof v === "string" && !v.trim()) return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+};
 
 // ---------------------------------------------------------------- cross checks
 
@@ -30,10 +38,19 @@ export function checkPaymentConstraints(open: Obj, closed: Obj): { violations: s
         else {
           if (c.currency && amount.currency !== c.currency)
             violations.push(`currency is ${asText(amount.currency)} but the open mandate allows only ${asText(c.currency)}`);
-          if (c.max !== undefined && Number(amount.amount) > Number(c.max))
-            violations.push(`${formatMinor(amount.amount, amount.currency)} exceeds the ${formatMinor(c.max, c.currency)} cap`);
-          if (c.min !== undefined && Number(amount.amount) < Number(c.min))
-            violations.push(`${formatMinor(amount.amount, amount.currency)} is below the ${formatMinor(c.min, c.currency)} minimum`);
+          const paid = num(amount.amount);
+          const max = c.max === undefined ? undefined : num(c.max);
+          const min = c.min === undefined ? undefined : num(c.min);
+          if (paid === undefined)
+            violations.push(`payment amount '${asText(amount.amount)}' is not a number, so the range can't be satisfied`);
+          else if (c.max !== undefined && max === undefined) violations.push(`amount_range max '${asText(c.max)}' is not a number`);
+          else if (c.min !== undefined && min === undefined) violations.push(`amount_range min '${asText(c.min)}' is not a number`);
+          else {
+            if (max !== undefined && paid > max)
+              violations.push(`${formatMinor(amount.amount, amount.currency)} exceeds the ${formatMinor(c.max, c.currency)} cap`);
+            if (min !== undefined && paid < min)
+              violations.push(`${formatMinor(amount.amount, amount.currency)} is below the ${formatMinor(c.min, c.currency)} minimum`);
+          }
         }
         break;
       case "payment.allowed_payees":
@@ -66,10 +83,21 @@ export function checkPaymentConstraints(open: Obj, closed: Obj): { violations: s
         checked.push("budget currency");
         if (amount && amount.currency !== c.currency)
           violations.push(`budget is in ${asText(c.currency)} but the payment is in ${asText(amount.currency)}`);
-        else if (amount && Number(amount.amount) > Number(c.max) * 100)
-          violations.push(
-            `this single payment (${formatMinor(amount.amount, amount.currency)}) already exceeds the ${formatMajor(c.max, c.currency)} budget`,
-          );
+        else if (amount) {
+          // budget.max is in major units while payment_amount is in minor units: scale by the
+          // currency's ISO 4217 exponent (JPY 0, USD 2, KWD 3), never a hard-coded 100.
+          const dec = currencyDecimals(c.currency);
+          const paid = num(amount.amount);
+          const max = num(c.max);
+          if (dec === undefined || paid === undefined || max === undefined)
+            violations.push(
+              `can't compare the payment (${asText(amount.amount)} ${asText(amount.currency)}) with the budget (${asText(c.max)} ${asText(c.currency)})`,
+            );
+          else if (paid > max * 10 ** dec)
+            violations.push(
+              `this single payment (${formatMinor(amount.amount, amount.currency)}) already exceeds the ${formatMajor(c.max, c.currency)} budget`,
+            );
+        }
         skipped.push("cumulative budget (needs spend history)");
         break;
       case "payment.execution_date": {
@@ -127,7 +155,7 @@ export function checkCheckoutConstraints(open: Obj, closed: Obj): { violations: 
         const id = isRecord(li.item) ? li.item.id : undefined;
         const slot = wanted.find((w) => Array.isArray(w.acceptable_items) && w.acceptable_items.some((a) => isRecord(a) && a.id === id));
         if (!slot) violations.push(`cart item ${asText(id)} is not one of the acceptable items`);
-        else if (Number(li.quantity ?? 1) > Number(slot.quantity ?? 1))
+        else if (!(Number(li.quantity ?? 1) <= Number(slot.quantity ?? 1)))
           violations.push(`cart has ${asText(li.quantity)} of ${asText(id)} but the mandate allows ${asText(slot.quantity)}`);
       }
     } else skipped.push(asText(c.type));

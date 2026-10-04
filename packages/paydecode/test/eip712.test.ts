@@ -10,6 +10,8 @@ import {
   keccakUtf8,
   makeRecoverer,
 } from "../src/crypto/eip712.js";
+import { secp256k1 } from "@noble/curves/secp256k1.js";
+import { keccak_256 } from "@noble/hashes/sha3.js";
 import { ANVIL_0, TWA_TYPES, USDC_BASE_SEPOLIA } from "./helpers.js";
 
 const hex = (b: Uint8Array) => "0x" + Buffer.from(b).toString("hex");
@@ -151,5 +153,34 @@ describe("eip712 vs viem", () => {
       expect(rec(dg)).toBe(recoverAddress(dg, sig));
     }
     expect(makeRecoverer("0x1234")).toBeNull();
+  });
+
+  it("makeRecoverer agrees with recoverAddress on random keys, digests, v forms, high-s and garbage", () => {
+    const N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
+    let seed = 7;
+    const rnd = (n: number) => {
+      const out = new Uint8Array(n);
+      for (let i = 0; i < n; i++) out[i] = (seed = (seed * 1103515245 + 12345) & 0x7fffffff) & 0xff;
+      return out;
+    };
+    for (let k = 0; k < 25; k++) {
+      const sk = keccak_256(rnd(32));
+      const signed = keccak_256(rnd(32));
+      const rec = secp256k1.sign(signed, sk, { prehash: false, format: "recovered" });
+      const r = hex(rec.slice(1, 33)).slice(2);
+      const s = BigInt(hex(rec.slice(33)));
+      const forms = [
+        `0x${r}${s.toString(16).padStart(64, "0")}${(rec[0] + 27).toString(16)}`, // canonical, v 27/28
+        `0x${r}${s.toString(16).padStart(64, "0")}0${rec[0]}`, // v 0/1
+        `0x${r}${(N - s).toString(16).padStart(64, "0")}${(28 - rec[0]).toString(16)}`, // high-s twin
+        hex(rnd(65)), // garbage: usually invalid, sometimes a random valid point
+      ];
+      for (const sig of forms) {
+        const fast = makeRecoverer(sig);
+        for (const digest of [signed, keccak_256(rnd(32)), new Uint8Array(32)]) {
+          expect(fast ? fast(digest) : null).toBe(recoverAddress(digest, sig));
+        }
+      }
+    }
   });
 });

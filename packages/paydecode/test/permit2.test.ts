@@ -100,4 +100,15 @@ describe("x402 exact / Permit2", () => {
   it("expired deadline", async () => {
     expect(codes(dec(b64(await permit2Payload()), NOW + 3600))).toContain("AUTH_EXPIRED");
   });
+
+  it("window is inclusive at both ends, like Permit2 (deadline) and the x402 proxy (validAfter)", async () => {
+    const p = b64(await permit2Payload());
+    // Permit2 reverts only when block.timestamp > deadline.
+    expect(codes(dec(p, NOW + 300))).not.toContain("AUTH_EXPIRED");
+    expect(dec(p, NOW + 300).summary).not.toContain("(expired");
+    expect(codes(dec(p, NOW + 301))).toContain("AUTH_EXPIRED");
+    // x402BasePermit2Proxy reverts only when block.timestamp < witness.validAfter.
+    expect(codes(dec(p, NOW - 600))).not.toContain("AUTH_NOT_YET_VALID");
+    expect(codes(dec(p, NOW - 601))).toContain("AUTH_NOT_YET_VALID");
+  });
 });

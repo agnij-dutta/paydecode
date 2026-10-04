@@ -25,6 +25,8 @@ export interface Analysis {
   /** Short phrase about the signature for the parent summary, e.g. "Signature valid." */
   sigPhrase: string;
   payer?: string;
+  /** The token the amount was formatted with (stated or inferred from the signature domain), if known. */
+  token?: EvmToken;
 }
 
 export const hex0x = (s: unknown) => {
@@ -42,9 +44,34 @@ export function amountText(value: unknown, tk: EvmToken | undefined, asset?: str
   return `${asText(value)} atomic units of ${asset ? short(asset) : "an unknown token"}`;
 }
 
-export function windowFlags(after: number | undefined, before: number | undefined, now: number, ctx: PaymentContext): Flag[] {
+/**
+ * How a contract compares block.timestamp with the window bounds.
+ * EIP-3009 (FiatToken): `now > validAfter && now < validBefore`, both bounds exclusive.
+ * Permit2 + x402 proxy: `block.timestamp >= witness.validAfter` and `block.timestamp <= deadline`, both inclusive.
+ */
+export interface WindowRule {
+  startInclusive: boolean;
+  endInclusive: boolean;
+}
+export const EIP3009_WINDOW: WindowRule = { startInclusive: false, endInclusive: false };
+export const PERMIT2_WINDOW: WindowRule = { startInclusive: true, endInclusive: true };
+
+/** True once `now` is past the last second the contract still accepts. */
+export const isExpired = (before: number | undefined, now: number, rule: WindowRule) =>
+  before !== undefined && (rule.endInclusive ? now > before : now >= before);
+/** True while `now` is before the first second the contract accepts. */
+export const isNotYetValid = (after: number | undefined, now: number, rule: WindowRule) =>
+  after !== undefined && (rule.startInclusive ? now < after : now <= after);
+
+export function windowFlags(
+  after: number | undefined,
+  before: number | undefined,
+  now: number,
+  ctx: PaymentContext,
+  rule: WindowRule = EIP3009_WINDOW,
+): Flag[] {
   const flags: Flag[] = [];
-  if (before !== undefined && before <= now) {
+  if (before !== undefined && isExpired(before, now, rule)) {
     flags.push(
       flag(
         "danger",
@@ -53,7 +80,7 @@ export function windowFlags(after: number | undefined, before: number | undefine
       ),
     );
   }
-  if (after !== undefined && after > now) {
+  if (after !== undefined && isNotYetValid(after, now, rule)) {
     flags.push(flag("warn", "AUTH_NOT_YET_VALID", `Not valid yet: becomes usable ${relative(after, now)}. Settling before then reverts.`));
   }
   if (before !== undefined) {

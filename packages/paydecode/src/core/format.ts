@@ -45,23 +45,61 @@ export function formatUnits(value: unknown, decimals: number, minFraction = 2): 
   return (neg ? "-" : "") + groupThousands(int) + (frac ? "." + frac : "");
 }
 
-export const ZERO_DECIMAL = new Set(["JPY", "KRW", "VND", "CLP", "ISK", "UGX", "XAF", "XOF", "PYG", "RWF"]);
+/** ISO 4217 currencies whose minor unit is not 1/100 (https://www.six-group.com/en/products-services/financial-information/data-standards.html). */
+export const ZERO_DECIMAL = new Set([
+  "BIF",
+  "CLP",
+  "DJF",
+  "GNF",
+  "ISK",
+  "JPY",
+  "KMF",
+  "KRW",
+  "PYG",
+  "RWF",
+  "UGX",
+  "UYI",
+  "VND",
+  "VUV",
+  "XAF",
+  "XOF",
+  "XPF",
+]);
+export const THREE_DECIMAL = new Set(["BHD", "IQD", "JOD", "KWD", "LYD", "OMR", "TND"]);
+export const FOUR_DECIMAL = new Set(["CLF", "UYW"]);
 export const SYMBOL: Record<string, string> = { USD: "$", EUR: "€", GBP: "£", JPY: "¥", INR: "₹", CAD: "CA$", AUD: "A$" };
 
-/** Fiat minor units -> "$200.00 USD". */
+/**
+ * Minor-unit exponent of an ISO 4217 code, or undefined when `currency` isn't a three-letter
+ * code (a token symbol like "USDC" has no fixed minor unit, so we must not guess one).
+ */
+export function currencyDecimals(currency: unknown): number | undefined {
+  const cur = asText(currency, "").toUpperCase();
+  if (!/^[A-Z]{3}$/.test(cur)) return undefined;
+  if (ZERO_DECIMAL.has(cur)) return 0;
+  if (THREE_DECIMAL.has(cur)) return 3;
+  if (FOUR_DECIMAL.has(cur)) return 4;
+  return 2;
+}
+
+/** Fiat minor units -> "$200.00 USD". Non-ISO currencies are shown raw instead of assuming cents. */
 export function formatMinor(amount: unknown, currency: unknown): string {
   const cur = asText(currency, "").toUpperCase();
-  const decimals = ZERO_DECIMAL.has(cur) ? 0 : 2;
+  const decimals = currencyDecimals(cur);
+  if (decimals === undefined) return `${asText(amount)} minor units${cur ? ` of ${cur}` : " (currency not stated)"}`;
   const num = formatUnits(amount, decimals);
   const sym = SYMBOL[cur] ?? "";
-  return `${sym}${num}${cur ? " " + cur : ""}`;
+  return `${sym}${num} ${cur}`;
 }
 
 /** Fiat major units (float) -> "$12.50 USD". */
 export function formatMajor(amount: unknown, currency: unknown): string {
   const cur = asText(currency, "").toUpperCase();
   const n = Number(amount);
-  const num = Number.isFinite(n) ? n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 8 }) : asText(amount);
+  const min = currencyDecimals(cur) ?? 2;
+  const num = Number.isFinite(n)
+    ? n.toLocaleString("en-US", { minimumFractionDigits: min, maximumFractionDigits: Math.max(min, 8) })
+    : asText(amount);
   return `${SYMBOL[cur] ?? ""}${num}${cur ? " " + cur : ""}`;
 }
 
@@ -77,6 +115,17 @@ export function toUnix(v: unknown): number | undefined {
   }
   const ms = Date.parse(s);
   return Number.isNaN(ms) ? undefined : Math.floor(ms / 1000);
+}
+
+/**
+ * Strict unix seconds for on-chain uint256 timestamps (EIP-3009 validAfter/validBefore, Permit2
+ * deadline). Unlike `toUnix` there is no milliseconds heuristic: the contract compares the raw
+ * integer with block.timestamp, so 1_800_000_000_000 means a date ~57,000 years out, not 2027.
+ */
+export function toUnixSeconds(v: unknown): number | undefined {
+  if (typeof v === "number") return Number.isInteger(v) && v >= 0 ? v : undefined;
+  const s = asText(v, "").trim();
+  return /^\d+$/.test(s) ? Number(s) : undefined;
 }
 
 /** "27 Feb 2025" */
@@ -121,6 +170,7 @@ export function duration(seconds: number): string {
 /** "in 2 hours" / "3 days ago" */
 export function relative(unix: number, now: number): string {
   const d = unix - now;
+  if (!Number.isFinite(d)) return d > 0 ? "in the far future" : "in the distant past";
   if (Math.abs(d) < 5) return "right now";
   return d > 0 ? `in ${duration(d)}` : `${duration(d)} ago`;
 }
