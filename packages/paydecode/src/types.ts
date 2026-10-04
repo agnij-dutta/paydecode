@@ -16,11 +16,17 @@ export interface Field {
   note?: string;
   /** Hint for the UI: render as address / amount / time / hash / code. */
   kind?: "address" | "amount" | "time" | "hash" | "code" | "text";
+  /** For `kind: "time"` fields: the timestamp in unix seconds, so UIs needn't re-parse `value`. Added in 0.1.0. */
+  unixSeconds?: number;
+  /** For fields that describe one hop of an AP2 SD-JWT chain: the 1-based hop number. Added in 0.1.0. */
+  hop?: number;
 }
 
 export interface Section {
   title: string;
   fields: Field[];
+  /** For AP2 SD-JWT chains: the 1-based hop this section describes. Added in 0.1.0. */
+  hop?: number;
 }
 
 export interface Decoded {
@@ -50,4 +56,6 @@ export interface Unrecognized {
   sections: Section[];
   flags: Flag[];
   raw: unknown;
+  /** Never set; present so `result.children` type-checks on `Decoded | Unrecognized`. */
+  children?: never;
 }

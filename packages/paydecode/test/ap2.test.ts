@@ -286,3 +286,19 @@ describe("AP2 v0.1 legacy mandates", () => {
     expect(flagOf(d, "PAYMENT_MANDATE_UNSIGNED")?.level).toBe("danger");
   });
 });
+
+describe("structured UI hints", () => {
+  it("tags chain sections and fields with their hop and time fields with unix seconds", () => {
+    const d = dec(CHAIN, AP2_NOW);
+    const hopSections = d.sections.filter((s) => s.hop !== undefined);
+    expect(hopSections.map((s) => [s.hop, s.title.slice(0, 5)])).toEqual([
+      [1, "Hop 1"],
+      [2, "Hop 2"],
+    ]);
+    const chainOverview = d.sections.find((s) => s.title === "Chain")!;
+    expect(chainOverview.fields.filter((f) => f.hop !== undefined).map((f) => f.hop)).toEqual([1, 2]);
+    const expires = hopSections[0].fields.find((f) => f.label === "Expires")!;
+    expect(expires.kind).toBe("time");
+    expect(expires.unixSeconds).toBe(1777345957);
+  });
+});

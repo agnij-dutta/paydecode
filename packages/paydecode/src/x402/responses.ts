@@ -128,7 +128,9 @@ export function decodeSupported(o: Obj): Decoded {
         ? [
             section(
               "Signers",
-              Object.entries(signers).map(([k, v]) => field(k, Array.isArray(v) ? v.join(", ") : JSON.stringify(v), "address")),
+              Object.entries(signers).flatMap(([k, v]) =>
+                Array.isArray(v) ? v.map((addr) => field(k, asText(addr), "address")) : [field(k, JSON.stringify(v), "code")],
+              ),
             ),
           ]
         : []),

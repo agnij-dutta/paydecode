@@ -17,4 +17,5 @@ All notable changes to this project are documented here. The format follows [Kee
 - AP2 v0.1 Intent, Cart and Payment mandates, and the AP2 x x402 credential bundle (nonce = keccak256(chain)).
 - MPP challenges, credentials and receipts; ACP delegate payment, allowance, vault token and payment data; Visa TAP / RFC 9421 `Signature-Input`.
 - `paydecode` CLI with `--json`, `--now`, `--strict` and color output.
+- Optional UI hints on results: `Section.hop` / `Field.hop` for AP2 chains and `Field.unixSeconds` on time fields; `Unrecognized.children?: never`; exported `Domain`, `TypeMap`, `TypedField` types.
 - Web app (`web/`) for paste-and-read decoding in the browser.

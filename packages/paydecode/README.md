@@ -104,7 +104,15 @@ Nested artifacts (the mandate chain inside an AP2 bundle, the x402 requirements 
 
 ### Public types
 
-`src/types.ts` is unchanged from the original contract. Additions live outside it: the `detect()` return type `Detection` is exported from `src/detect.ts`, and `Decoded.kind` takes the values listed in the table above.
+`src/types.ts` only ever grows additively. Optional fields added on top of the original contract:
+
+| Field | Meaning |
+|---|---|
+| `Section.hop`, `Field.hop` | 1-based hop number for AP2 SD-JWT chain sections and the chain overview's per-hop fields, so UIs don't parse titles |
+| `Field.unixSeconds` | The timestamp behind every `kind: "time"` field that has one, so UIs don't re-parse the human date |
+| `Unrecognized.children?: never` | Lets `result.children` type-check on `Decoded \| Unrecognized` |
+
+Address fields (`kind: "address"`) always hold a bare address in `value`. Token names and roles go in `note`. `detect()` returns `Detection` (from `src/detect/index.ts`), and the EIP-712 types `Domain`, `TypeMap` and `TypedField` are exported for callers of `typedDataHash`.
 
 ## Why
 

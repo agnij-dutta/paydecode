@@ -137,7 +137,7 @@ export const timeField = (label: string, unix: number | undefined, now: number, 
     ? field(label, asText(raw, "not set"), "time")
     : unix === 0
       ? field(label, "0 (no start time)", "time")
-      : field(label, formatTime(unix), "time", `${relative(unix, now)}; raw ${asText(raw, unix)}`);
+      : { ...field(label, formatTime(unix), "time", `${relative(unix, now)}; raw ${asText(raw, unix)}`), unixSeconds: unix };
 
 export const flag = (level: FlagLevel, code: string, message: string): Flag => ({ level, code, message });
 

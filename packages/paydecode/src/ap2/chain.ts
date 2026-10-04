@@ -205,10 +205,10 @@ export function decodeSdJwtChain(input: string, now: number): ChainResult | unde
         flags.push(
           flag("warn", "TERMINAL_HAS_CNF", `${label}: the terminal (closed) hop carries a cnf claim; AP2 says terminal hops must not.`),
         );
-      sections.push(section(`${label}: ${v.label}`, [...v.fields, ...fields]));
+      sections.push({ ...section(`${label}: ${v.label}`, [...v.fields, ...fields]), hop: i + 1 });
     } else {
       flags.push(flag("warn", "HOP_NO_MANDATE", `${label}: no delegate_payload mandate was disclosed.`));
-      sections.push(section(`${label}: SD-JWT`, [...fields, field("Claims", JSON.stringify(hop.resolved), "code")]));
+      sections.push({ ...section(`${label}: SD-JWT`, [...fields, field("Claims", JSON.stringify(hop.resolved), "code")]), hop: i + 1 });
     }
   });
 
@@ -276,7 +276,7 @@ export function decodeSdJwtChain(input: string, now: number): ChainResult | unde
   sections.unshift(
     section("Chain", [
       field("Hops", asText(hops.length)),
-      ...views.map((v, i) => field(`Hop ${i + 1}`, v.label, "text", v.english)),
+      ...views.map((v, i) => ({ ...field(`Hop ${i + 1}`, v.label, "text", v.english), hop: i + 1 })),
       ...(crossLines.length
         ? [
             field(
