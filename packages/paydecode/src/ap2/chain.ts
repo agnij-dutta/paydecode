@@ -30,7 +30,8 @@ export function decodeSdJwtChain(input: string, now: number): ChainResult | unde
   if (!hops || !hops.length) return undefined;
   const flags: Flag[] = [];
   const sections: Section[] = [];
-  const views: MandateView[] = [];
+  /** Rendered mandates with the 1-based hop each came from (hops without a mandate are skipped). */
+  const views: (MandateView & { hop: number })[] = [];
   let sigVerified = 0;
   let sigUnchecked = 0;
   let sigBad = 0;
@@ -192,7 +193,7 @@ export function decodeSdJwtChain(input: string, now: number): ChainResult | unde
     const mandate = primaryMandate(hop);
     if (mandate) {
       const v = renderMandate(mandate, now, label);
-      views.push(v);
+      views.push({ ...v, hop: i + 1 });
       flags.push(...v.flags);
       const hasCnf = isRecord(mandate.cnf) || isRecord(hop.resolved.cnf);
       if (isLast && v.open && !hasCnf)
@@ -286,7 +287,7 @@ export function decodeSdJwtChain(input: string, now: number): ChainResult | unde
   sections.unshift(
     section("Chain", [
       field("Hops", asText(hops.length)),
-      ...views.map((v, i) => ({ ...field(`Hop ${i + 1}`, v.label, "text", v.english), hop: i + 1 })),
+      ...views.map((v) => ({ ...field(`Hop ${v.hop}`, v.label, "text", v.english), hop: v.hop })),
       ...(crossLines.length
         ? [
             field(

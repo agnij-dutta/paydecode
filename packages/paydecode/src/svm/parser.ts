@@ -39,7 +39,10 @@ export interface ParsedTx {
 
 export class Reader {
   o = 0;
-  constructor(public b: Uint8Array) {}
+  readonly b: Uint8Array;
+  constructor(b: Uint8Array) {
+    this.b = b;
+  }
   u8(): number {
     if (this.o >= this.b.length) throw new Error("unexpected end of transaction bytes");
     return this.b[this.o++];

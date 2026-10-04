@@ -396,3 +396,14 @@ describe("SD-JWT processing rules (RFC 9901 section 7.1) and ES256", () => {
     );
   });
 });
+
+describe("hop numbering", () => {
+  it("Chain section rows carry the real hop number when an earlier hop discloses no mandate", () => {
+    const h1 = sign({ alg: "ES256", typ: "example+sd-jwt" }, { cnf: { jwk: jwkOf(agentKey) } }, rootKey);
+    const h2 = sign({ alg: "ES256", typ: "kb+sd-jwt" }, { delegate_payload: [closedMandate(500)] }, agentKey);
+    const d = dec(`${h1}~~${h2}~`, AP2_NOW);
+    const chainRows = d.sections[0].fields.filter((f) => f.hop !== undefined);
+    expect(chainRows.map((f) => [f.label, f.hop, f.value])).toEqual([["Hop 2", 2, "Closed payment mandate"]]);
+    expect(d.sections.slice(1).map((s) => s.hop)).toEqual([1, 2]);
+  });
+});
