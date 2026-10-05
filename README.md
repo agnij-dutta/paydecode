@@ -1,5 +1,7 @@
 # paydecode
 
+[![npm](https://img.shields.io/npm/v/paydecode)](https://www.npmjs.com/package/paydecode)
+
 **jwt.io for agent payments.** Paste any agent-payment artifact (an x402 header, an AP2 mandate chain, an EIP-3009 or Permit2 authorization, a Solana payment transaction, an MPP, ACP or Visa TAP message) and get a plain-English explanation of what it authorizes, plus specific, actionable risk flags. It ships as a TypeScript library, a CLI and a web app. Everything is decoded locally.
 
 ```
@@ -39,6 +41,15 @@ The bugs are real and quiet. AP2's x402 sample signs Base Sepolia USDC with the 
 ## Quickstart
 
 Requires Node 20.19 or newer.
+
+Run the CLI straight from npm, or add the library to your project:
+
+```sh
+npx paydecode "X-PAYMENT: eyJ4NDAy..."   # any header, JSON, SD-JWT or base64 tx
+npm install paydecode                     # the library (ESM)
+```
+
+Or build from source, which also gives you the web app and the demo fixtures:
 
 ```sh
 git clone https://github.com/agnij-dutta/paydecode.git

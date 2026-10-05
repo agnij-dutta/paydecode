@@ -1,5 +1,7 @@
 # paydecode
 
+[![npm](https://img.shields.io/npm/v/paydecode)](https://www.npmjs.com/package/paydecode)
+
 **jwt.io for agent payments.** Paste any agent-payment artifact and get a plain-English explanation of what it authorizes, plus specific, actionable risk flags.
 
 ```
@@ -24,6 +26,13 @@ AP2 x x402 payment credential  ap2.x402-credential
 (Real output, trimmed where marked. The input is the bundle AP2's `x402_credentials_provider_mcp` sample produces, reproduced with the sample's default keys.)
 
 Runs entirely offline, in Node or the browser. Runtime dependencies are only `@noble/hashes`, `@noble/curves` and `@scure/base`.
+
+## Install
+
+```sh
+npx paydecode "<blob>"     # run the CLI without installing
+npm install paydecode      # the library (ESM, Node 20.19+ or the browser)
+```
 
 ## What it decodes
 
