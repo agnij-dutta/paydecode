@@ -36,7 +36,7 @@ The web build does not need `packages/paydecode/dist`: Vite and TypeScript both 
 
 The output is a static site: `web/dist` is plain HTML, CSS and JS with no server code, no API routes and no environment variables. Any static host works.
 
-Vercel (not set up yet) would be: root directory `web`, install command `cd .. && npm install`, build command `npm run build`, output directory `dist`. The canonical URL and Open Graph tags in `index.html` assume `https://paydecode.vercel.app/`; change them if the site lives elsewhere.
+It is live at https://paydecode.vercel.app, deployed by Vercel on every push to `main`. The settings are in the repo root's `vercel.json`: install `npm ci`, build `npm run build -w paydecode && npm run build -w web`, output `web/dist`, no environment variables. The canonical URL and Open Graph tags in `index.html` assume `https://paydecode.vercel.app/`; change them if the site lives elsewhere.
 
 ## Architecture
 

@@ -2,6 +2,8 @@
 
 [![npm](https://img.shields.io/npm/v/paydecode)](https://www.npmjs.com/package/paydecode)
 
+Live: https://paydecode.vercel.app
+
 **jwt.io for agent payments.** Paste any agent-payment artifact (an x402 header, an AP2 mandate chain, an EIP-3009 or Permit2 authorization, a Solana payment transaction, an MPP, ACP or Visa TAP message) and get a plain-English explanation of what it authorizes, plus specific, actionable risk flags. It ships as a TypeScript library, a CLI and a web app. Everything is decoded locally.
 
 ```
@@ -39,6 +41,8 @@ AI agents now spend money through x402, AP2, MPP, ACP and Visa TAP, and every on
 The bugs are real and quiet. AP2's x402 sample signs Base Sepolia USDC with the EIP-712 domain name "USD Coin", but the deployed contract's name is "USDC", so every signature it produces reverts on-chain with a bare "invalid signature" and nothing in the payload says why. paydecode recovers the signer, notices it only matches under the wrong domain, and names the exact field to fix.
 
 ## Quickstart
+
+No install: paste an artifact into the web app at [paydecode.vercel.app](https://paydecode.vercel.app). It decodes in your tab and keeps input only in the URL hash.
 
 Requires Node 20.19 or newer.
 
